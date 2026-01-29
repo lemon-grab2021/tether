@@ -1,7 +1,8 @@
 {
-  "files": [],
-  "references": [
-    { "path": "./tsconfig.app.json" },
-    { "path": "./tsconfig.node.json" }
-  ]
+  "extends": "@tether/tsconfig/react",
+  "compilerOptions": {
+    "baseUrl": "."
+  },
+  "include": ["src", "vite-env.d.ts", "vite.config.ts"]
 }
+
