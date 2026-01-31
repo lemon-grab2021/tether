@@ -1,10 +1,9 @@
 {
-  "private": true,
   "name": "@tether/shared-ui",
-  "version": "1.0.0",
+  "version": "0.1.0",
+  "private": true,
   "type": "module",
   "sideEffects": false,
-  "description": "",
   "main": "dist/index.cjs",
   "module": "dist/index.mjs",
   "types": "dist/index.d.ts",
@@ -12,20 +11,15 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.mjs",
-      "require": "./dist/index.cjs"
+      "require": "./dist/index.cjs",
+      "default": "./dist/index.mjs"
     }
   },
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "build": "tsup src/index.ts --format esm,cjs --dts --clean",
-    "lint": "eslint .",
+    "build": "tsup src/index.ts --format esm,cjs --dts --clean --external react --external react-dom",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "packageManager": "pnpm@10.28.2",
-  "peerdependencies": {
+  "peerDependencies": {
     "react": "^19.2.0",
     "react-dom": "^19.2.0"
   },

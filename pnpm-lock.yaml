@@ -101,6 +101,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@tether/shared-ui':
+        specifier: workspace:*
+        version: link:../../packages/shared-ui
       react:
         specifier: ^19.2.0
         version: 19.2.4
@@ -149,6 +152,13 @@ importers:
         version: 7.3.1(@types/node@24.10.9)(terser@5.46.0)
 
   packages/shared-ui:
+    dependencies:
+      react:
+        specifier: ^19.2.0
+        version: 19.2.4
+      react-dom:
+        specifier: ^19.2.0
+        version: 19.2.4(react@19.2.4)
     devDependencies:
       '@types/react':
         specifier: ^19.2.0
