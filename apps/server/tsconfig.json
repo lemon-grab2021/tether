@@ -3,9 +3,11 @@
   "compilerOptions": {
     "outDir": "dist",
     "emitDecoratorMetadata": true,
-    "experimentalDecorators": true
+    "experimentalDecorators": true,
+    "types": ["node"]
+
   },
-  "include": ["src/**/*.ts"],
+  "include": ["src/**/*.ts","prisma.config.ts"],
   "exclude": ["src/**/*.spec.ts", "test", "dist", "node_modules"]
 }
 

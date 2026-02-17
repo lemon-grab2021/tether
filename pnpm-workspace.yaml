@@ -1,5 +1,9 @@
 packages:
-  - 'apps/*'
-  - 'packages/*'
+  - apps/*
+  - packages/*
   - '!**/dist'
   - '!**/build'
+
+onlyBuiltDependencies:
+  - '@prisma/engines'
+  - prisma
