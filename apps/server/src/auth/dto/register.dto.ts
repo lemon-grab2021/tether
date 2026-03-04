@@ -2,7 +2,7 @@ import { IsEmail, IsString, MinLength, MaxLength, Matches } from 'class-validato
 
 export class RegisterDto {
   @IsEmail()
-  email: string;
+  email!: string;
 
   @IsString()
   @MinLength(5)
@@ -10,15 +10,15 @@ export class RegisterDto {
   @Matches(/^[a-zA-Z0-9_]+$/, {
     message: 'Username can only contain letters, numbers, and underscores',
   })
-  username: string;
+  username!: string;
 
   @IsString()
   @MinLength(2)
   @MaxLength(15)
-  displayName: string;
+  displayName!: string;
 
   @IsString()
   @MinLength(5)
   @MaxLength(10)
-  password: string;
+  password!: string;
 }
