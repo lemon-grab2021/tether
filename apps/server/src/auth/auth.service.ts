@@ -98,12 +98,12 @@ export class AuthService {
 
     async refreshTokens(refreshToken: string) {
         try {
-            // Verify refresh token
+            // Verify the refresh token
             const payload = this.jwtService.verify(refreshToken, {
                 secret: this.config.get<string>('JWT_SECRET')!,
             });
 
-            // Check if token exists in database
+            // Checks if the token exists in database
             const storedToken = await this.prisma.refreshToken.findUnique({
                 where: { token: refreshToken },
             });
@@ -146,7 +146,7 @@ export class AuthService {
             expiresIn: this.config.get<string>('JWT_REFRESH_TTL')!,
         } as any);
 
-        // Store refresh token in database
+        // Stores refresh token in database
         const decoded = this.jwtService.decode(refreshToken) as any;
         await this.prisma.refreshToken.create({
             data: {
