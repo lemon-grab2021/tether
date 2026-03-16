@@ -6,7 +6,7 @@ import { Roles } from './decorators/roles.decorator';
 import { CirclesService } from './circles.service';
 import { CreateCircleDto } from './dto/create-circle.dto';
 import { JoinCircleDto } from './dto/join-circle.dto';
-import { MemberRole } from '../generated/prisma/client';
+import { MemberRole } from '../generated/prisma';
 
 @Controller('circles')
 @UseGuards(JwtAuthGuard)

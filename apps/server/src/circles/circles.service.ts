@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException, ForbiddenException, ConflictException } from '@nestjs/common'
 import { PrismaService } from 'src/prisma/prisma.service';
 import { CreateCircleDto } from './dto/create-circle.dto';
-import { MemberRole } from '../generated/prisma/client';
+import { MemberRole } from '../generated/prisma';
 import { randomBytes } from 'crypto';
 
 
