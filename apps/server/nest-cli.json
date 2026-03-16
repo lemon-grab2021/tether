@@ -8,7 +8,8 @@
     "tsConfigPath": "tsconfig.json",
     "assets": [
       {
-        "include": "generated/**/*",
+        "include": "generated/**/*.{js,d.ts}",
+        "exclude": "generated/**/schema.prisma",
         "outDir": "dist/src"
       }
     ]
