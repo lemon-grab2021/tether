@@ -56,7 +56,6 @@ export class UploadsService {
             Bucket: this.bucketName,
             Key: key,
             ContentType: mimeType,
-            ContentLength: fileSize,
         });
 
         const uploadUrl = await getSignedUrl(this.s3Client, putCommand, {
@@ -72,7 +71,7 @@ export class UploadsService {
         });
 
         const downloadUrl = await getSignedUrl(this.s3Client, getCommand, {
-            expiresIn: 31536000, // 1 year (effectively permanent for testing)
+            expiresIn: 604800, // 1 year (effectively permanent for testing)
         });
 
         return {
