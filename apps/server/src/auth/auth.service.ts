@@ -133,7 +133,17 @@ export class AuthService {
     }
 
     private async generateTokens(userId: number) {
-        const payload = { sub: userId };
+        // Get user details for token payload 
+        const user = await this.prisma.user.findUnique({
+            where: { id: userId },
+            select: { id: true, email: true, username: true }
+        })
+
+        const payload = {
+            sub: userId,
+            email: user!.email,
+            username: user!.username,
+        };
         const secret = this.config.get<string>('JWT_SECRET')!;
 
         const accessToken = this.jwtService.sign(payload, {

@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Tether WebSocket Test</title>
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <style>
+        body { font-family: Arial; padding: 20px; }
+        .user { margin: 20px 0; padding: 20px; border: 1px solid #ccc; }
+        input, button { padding: 10px; margin: 5px; }
+        #messages { border: 1px solid #ccc; padding: 10px; height: 300px; overflow-y: scroll; }
+        .message { padding: 5px; margin: 5px 0; background: #f0f0f0; }
+    </style>
+</head>
+<body>
+    <h1>WebSocket Messaging Test</h1>
+    
+    <div class="user">
+        <h2>User 1 (testuser)</h2>
+        <input type="text" id="token1" placeholder="Paste User 1 Access Token" style="width: 400px;">
+        <button onclick="connectUser1()">Connect</button>
+        <button onclick="joinCircle1()">Join Circle</button>
+        <button onclick="leaveCircle1()">Leave Circle</button>
+        <br>
+        <input type="text" id="message1" placeholder="Type message...">
+        <button onclick="sendMessage1()">Send</button>
+        <div id="status1">Disconnected</div>
+    </div>
+
+    <div class="user">
+        <h2>User 2 (seconduser)</h2>
+        <input type="text" id="token2" placeholder="Paste User 2 Access Token" style="width: 400px;">
+        <button onclick="connectUser2()">Connect</button>
+        <button onclick="joinCircle2()">Join Circle</button>
+        <button onclick="leaveCircle2()">Leave Circle</button>
+        <br>
+        <input type="text" id="message2" placeholder="Type message...">
+        <button onclick="sendMessage2()">Send</button>
+        <div id="status2">Disconnected</div>
+    </div>
+
+    <h2>Messages</h2>
+    <div id="messages"></div>
+
+    <script>
+        let socket1, socket2;
+        const CIRCLE_ID = 1;
+
+        function connectUser1() {
+            const token = document.getElementById('token1').value;
+            socket1 = io('http://localhost:3000', {
+                auth: { token }
+            });
+
+            socket1.on('connect', () => {
+                document.getElementById('status1').textContent = 'Connected';
+                console.log('User 1 connected');
+                addMessage('🟢 User 1 connected to server', 'system');
+            });
+
+            socket1.on('disconnect', () => {
+            document.getElementById('status1').textContent = 'Disconnected';
+            addMessage('🔴 User 1 disconnected', 'system');
+            });
+
+            socket1.on('message:new', (msg) => {
+                addMessage(`💬 ${msg.sender.username}: ${msg.body}`);
+            });
+
+            socket1.on('user:joined', (data) => {
+                addMessage(`👋 ${data.username} joined the circle`, 'join');
+            });
+
+            socket1.on('user:left', (data) => {
+            addMessage(`👋 ${data.username} left the circle`, 'leave');
+            });
+
+            socket1.on('typing:update', (data) => {
+                 if (data.isTyping) {
+                addMessage(`✍️ ${data.username} is typing...`, 'typing');
+            } else {
+                addMessage(`${data.username} stopped typing`, 'typing');
+            }
+                console.log('Typing:', data);
+            });
+        }
+
+        function connectUser2() {
+            const token = document.getElementById('token2').value;
+            socket2 = io('http://localhost:3000', {
+                auth: { token }
+            });
+
+            socket2.on('connect', () => {
+                document.getElementById('status2').textContent = 'Connected';
+                console.log('User 2 connected');
+                addMessage('🟢 User 2 connected to server', 'system');
+            });
+            
+            socket2.on('disconnect', () => {
+                document.getElementById('status2').textContent = 'Disconnected';
+                addMessage('🔴 User 2 disconnected');
+            });
+           
+            socket2.on('message:new', (msg) => {
+                addMessage(`💬 ${msg.sender.username}: ${msg.body}`);
+            });
+
+            socket2.on('user:joined', (data) => {
+                addMessage(`👋 ${data.username} joined the circle`, 'join');
+            });
+
+            socket2.on('user:left', (data) => {
+                addMessage(`👋 ${data.username} left the circle`, 'leave');
+            });
+            
+            socket2.on('typing:update', (data) => {
+                 if (data.isTyping) {
+                addMessage(`✍️ ${data.username} is typing...`, 'typing');
+            } else {
+                addMessage(`${data.username} stopped typing`, 'typing');
+                console.log('Typing:', data);
+            }
+            });
+        }
+
+        function joinCircle1() {
+            socket1.emit('circle:join', { circleId: CIRCLE_ID }, (response) => {
+                console.log('Join response:', response);
+                if (response.success) {
+                    addMessage('✅ User 1 joined circle', 'join');
+                }
+            });
+        }
+
+        function joinCircle2() {
+            socket2.emit('circle:join', { circleId: CIRCLE_ID }, (response) => {
+                console.log('Join response:', response);
+                if (response.success) {
+                    addMessage('✅ User 2 joined circle', 'join');
+                }
+            });
+        }
+
+        function leaveCircle1(){
+            socket1.emit('circle:leave', { circleId: CIRCLE_ID }, (response) => {
+                console.log('User 1 leave response:', response);
+                addMessage('User 1 left circle room', 'leave');
+            });
+        }
+
+        function leaveCircle2(){
+            socket2.emit('circle:leave', { circleId: CIRCLE_ID }, (response) => {
+                console.log('User 2 leave response:', response);
+                addMessage('User 2 left circle room', 'leave');
+            });
+        }
+
+        function sendMessage1() {
+            const body = document.getElementById('message1').value;
+            socket1.emit('message:send', {
+                circleId: CIRCLE_ID,
+                body: body
+            });
+            document.getElementById('message1').value = '';
+        }
+
+        function sendMessage2() {
+            const body = document.getElementById('message2').value;
+            socket2.emit('message:send', {
+                circleId: CIRCLE_ID,
+                body: body
+            });
+            document.getElementById('message2').value = '';
+        }
+
+        // Typing Indicators
+        let typingTimeout1, typingTimeout2;
+        
+        document.getElementById('message1')?.addEventListener('input', (e) => {
+            if (socket1 && socket1.connected) {
+                socket1.emit('typing:start', { circleId: CIRCLE_ID });
+            
+                clearTimeout(typingTimeout1);
+                typingTimeout1 = setTimeout(() => {
+                    socket1.emit('typing:stop', { circleId: CIRCLE_ID });
+                }, 1000); // Stop typing after 1 second of no input
+            }
+        });
+
+        document.getElementById('message2')?.addEventListener('input', (e) => {
+            if (socket2 && socket2.connected) {
+                socket2.emit('typing:start', { circleId: CIRCLE_ID });
+            
+                clearTimeout(typingTimeout2);
+                typingTimeout2 = setTimeout(() => {
+                    socket2.emit('typing:stop', { circleId: CIRCLE_ID });
+                }, 1000);
+            }
+        });
+
+        function addMessage(text, type = 'message') {
+            const div = document.createElement('div');
+            div.className = 'message' + type;
+            
+            // Color code by type
+            const colors = {
+                'system': '#3498db',
+                'join': '#2ecc71',
+                'leave': '#e74c3c',
+                'typing': '#f39c12',
+                'message': '#34495e'
+            };
+        
+            div.style.backgroundColor = colors[type] || '#f0f0f0';
+            div.style.color = type === 'message' ? '#000' : '#fff';
+            div.style.padding = '8px';
+            div.style.marginBottom = '5px';
+            div.style.borderRadius = '4px';
+            
+           
+           
+            div.textContent = new Date().toLocaleTimeString() + ' - ' + text;
+            document.getElementById('messages').appendChild(div);
+            document.getElementById('messages').scrollTop = document.getElementById('messages').scrollHeight;
+        }
+    </script>
+</body>
+</html>
