@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'register_screen.dart';
-import '../../providers/auth_provider.dart';
+import '../home/home_screen.dart';
+import '../../../providers/auth_provider.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -35,12 +36,8 @@ class _LoginScreenState extends State<LoginScreen> {
       );
       
       if (mounted) {
-        // Navigate to home - we'll create this later
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Login successful!'),
-            backgroundColor: Colors.green,
-          ),
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(builder: (context) => const HomeScreen()),
         );
       }
     } catch (e) {
@@ -180,9 +177,6 @@ class _LoginScreenState extends State<LoginScreen> {
                             MaterialPageRoute(
                               builder: (context) => const RegisterScreen(),
                               ),
-                          );
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Register screen coming soon!')),
                           );
                         },
                         child: const Text('Register'),
