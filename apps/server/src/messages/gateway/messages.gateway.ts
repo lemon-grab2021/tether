@@ -13,7 +13,7 @@ import { ConfigService } from '@nestjs/config';
 import { MessagesService } from '../messages.service';
 import { CirclesService } from '../../circles/circles.service';
 import { SendMessageDto } from '../dto/send-message.dto';
-import { UseGuards } from '@nestjs/common';
+
 
 interface AuthenticatedSocket extends Socket {
     user?: {
@@ -25,7 +25,7 @@ interface AuthenticatedSocket extends Socket {
 
 @WebSocketGateway({
     cors: {
-        origin: '*', // Configure properly in production
+        origin: true,
         credentials: true,
     },
 })
@@ -46,9 +46,10 @@ export class MessagesGateway implements OnGatewayConnection, OnGatewayDisconnect
     async handleConnection(client: AuthenticatedSocket) {
         try {
             // Extract JWT token from handshake
-            const token = client.handshake.auth.token || client.handshake.headers.authorization?.split(' ')[1];
+            const token = client.handshake.auth.token
 
             if (!token) {
+                console.log('No token provided, disconnecting client');
                 client.disconnect();
                 return;
             }
@@ -58,20 +59,22 @@ export class MessagesGateway implements OnGatewayConnection, OnGatewayDisconnect
                 secret: this.config.get<string>('JWT_SECRET'),
             });
 
-            // Attach user to socket
+            const userId = payload.sub;
+
             client.user = {
                 id: payload.sub,
                 email: payload.email,
                 username: payload.username,
-            };
+            }
+
+            console.log('User ${userId} connected');
 
             // Track user's sockets
-            if (!this.userSockets.has(client.user.id)) {
-                this.userSockets.set(client.user.id, new Set());
+            if (!this.userSockets.has(userId)) {
+                this.userSockets.set(userId, new Set());
             }
-            this.userSockets.get(client.user.id)!.add(client.id);
+            this.userSockets.get(userId)!.add(client.id);
 
-            console.log(`Client connected: ${client.id} (User: ${client.user.username})`);
         } catch (error) {
             console.error('WebSocket auth error:', error);
             client.disconnect();
@@ -117,7 +120,7 @@ export class MessagesGateway implements OnGatewayConnection, OnGatewayDisconnect
 
             // Join the Socket.io room
             const roomName = `circle:${data.circleId}`;
-            client.join(roomName);
+            await client.join(roomName); // Make sure to await the join operation
             console.log(`[JOIN] SUCCESS: User ${client.user.username} joined room ${roomName}`);
 
             // Notify others in the circle
@@ -161,7 +164,9 @@ export class MessagesGateway implements OnGatewayConnection, OnGatewayDisconnect
         @ConnectedSocket() client: AuthenticatedSocket,
         @MessageBody() dto: SendMessageDto,
     ) {
-        console.log(`[MESSAGE] User ${client.user?.username} sending to circle ${dto.circleId}`);
+        console.log('[MESSAGE] received', dto); // Debugging line
+        console.log('[MESSAGE] user:', client.user); // Debugging line to check if user info is present
+
 
         if (!client.user) {
             console.log('[MESSAGE] ERROR: Not authenticated');

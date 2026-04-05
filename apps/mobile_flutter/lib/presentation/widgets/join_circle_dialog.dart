@@ -29,25 +29,21 @@ class _JoinCircleDialogState extends State<JoinCircleDialog> {
       final circlesProvider = context.read<CirclesProvider>();
       await circlesProvider.joinCircle(_inviteCodeController.text.trim());
 
-      if (mounted) {
-        Navigator.of(context).pop();
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Joined circle successfully!'),
-            backgroundColor: Colors.green,
-          ),
-        );
-      }
+      if (!mounted) return;
+      Navigator.of(context).pop(true);
     } catch (e) {
+      if (!mounted) return;
+
       setState(() => _isLoading = false);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to join circle: ${e.toString().replaceAll('Exception: ', '')}'),
-            backgroundColor: Colors.red,
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Failed to join circle: ${e.toString().replaceAll('Exception: ', '')}',
           ),
-        );
-      }
+          backgroundColor: Colors.red,
+        ),
+      );
     }
   }
 
@@ -65,7 +61,7 @@ class _JoinCircleDialogState extends State<JoinCircleDialog> {
             hintText: 'Enter invite code',
           ),
           validator: (value) {
-            if (value == null || value.isEmpty) {
+            if (value == null || value.trim().isEmpty) {
               return 'Please enter an invite code';
             }
             return null;
@@ -74,7 +70,7 @@ class _JoinCircleDialogState extends State<JoinCircleDialog> {
       ),
       actions: [
         TextButton(
-          onPressed: _isLoading ? null : () => Navigator.of(context).pop(),
+          onPressed: _isLoading ? null : () => Navigator.of(context).pop(false),
           child: const Text('Cancel'),
         ),
         ElevatedButton(

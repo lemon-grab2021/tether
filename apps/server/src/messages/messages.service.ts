@@ -48,7 +48,7 @@ export class MessagesService {
     }
 
     // Get messages for a circle with cursor-based pagination
-    async getMessages(circleId: number, userId: number, cursor?: number, limit: number = 50) {
+    async getMessages(circleId: number, userId: number, cursor?: number, limit: number = 100) {
         // Verify user is a member
         const isMember = await this.circlesService.isMember(circleId, userId);
         if (!isMember) {
@@ -87,6 +87,35 @@ export class MessagesService {
         });
 
         return messages.reverse(); // Reverse to show oldest first in UI
+    }
+
+    async findByCircle(circleId: number, cursor?: number, limit = 50) {
+        return this.prisma.message.findMany({
+            where: {
+                circleId,
+                deletedAt: null,
+            },
+            include: {
+                sender: {
+                    select: {
+                        id: true,
+                        username: true,
+                        displayName: true,
+                        avatarUrl: true,
+                    },
+                },
+            },
+            orderBy: {
+                createdAt: 'asc',
+            },
+            take: limit,
+            ...(cursor
+                ? {
+                    skip: 1,
+                    cursor: { id: cursor },
+                }
+                : {}),
+        });
     }
 
     // Edit a message (author only)

@@ -1,5 +1,7 @@
 import { Injectable, CanActivate, ExecutionContext, ForbiddenException } from '@nestjs/common';
 import { CirclesService } from '../circles.service';
+import { parse } from 'path';
+import { raw } from 'express';
 
 @Injectable()
 export class CircleMemberGuard implements CanActivate {
@@ -8,9 +10,10 @@ export class CircleMemberGuard implements CanActivate {
     async canActivate(context: ExecutionContext): Promise<boolean> {
         const request = context.switchToHttp().getRequest();
         const user = request.user; // From JwtAuthGuard
-        const circleId = parseInt(request.params.id || request.params.circleId);
+        const rawCircleId = request.params.circleId ?? request.params.id;
+        const circleId = parseInt(rawCircleId, 10);
 
-        if (!user || !circleId) {
+        if (!user || Number.isNaN(circleId)) {
             throw new ForbiddenException('Invalid request');
         }
 

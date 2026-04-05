@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'providers/auth_provider.dart';
 import 'providers/circles_provider.dart';
+import 'providers/messages_provider.dart';
 import 'presentation/screens/auth/login_screen.dart';
 
 void main() {
@@ -16,10 +17,11 @@ class MyApp extends StatelessWidget {
     return MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => AuthProvider()),
-        ChangeNotifierProvider(create: (_) => CirclesProvider(),)
-      ],
-      child: MaterialApp(
-        title: 'Tether',
+        ChangeNotifierProvider(create: (_) => CirclesProvider()),
+        ChangeNotifierProvider(create: (_) => MessagesProvider()),  
+        ],
+        child: MaterialApp(
+          title: 'Tether',
         debugShowCheckedModeBanner: false,
         theme: ThemeData(
           colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
