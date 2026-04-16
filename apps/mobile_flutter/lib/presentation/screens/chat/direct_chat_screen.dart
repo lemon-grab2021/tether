@@ -1,0 +1,317 @@
+import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
+import 'package:tether/providers/auth_provider.dart';
+import 'package:tether/providers/direct_messages_provider.dart';
+import '../../../data/models/direct_conversation.dart';
+
+class DirectChatScreen extends StatefulWidget {
+  final DirectConversation conversation;
+
+  const DirectChatScreen({super.key, required this.conversation});
+
+  @override
+  State<DirectChatScreen> createState() => _DirectChatScreenState();
+}
+
+class _DirectChatScreenState extends State<DirectChatScreen> {
+  final _messageController = TextEditingController();
+  final _scrollController = ScrollController();
+
+  DirectMessagesProvider? directMessagesProvider;
+
+  @override
+  void initState() {
+    super.initState();
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+
+      directMessagesProvider = context.read<DirectMessagesProvider>();
+      directMessagesProvider!.loadMessages(widget.conversation.id);
+      directMessagesProvider!.connectToConversation(widget.conversation.id);
+    });
+  }
+
+  @override
+  void dispose() {
+    _messageController.dispose();
+    _scrollController.dispose();
+    directMessagesProvider?.disconnect();
+    super.dispose();
+  }
+
+  void _scrollToBottom() {
+    if (_scrollController.hasClients) {
+      _scrollController.animateTo(
+        _scrollController.position.maxScrollExtent,
+        duration: const Duration(milliseconds: 280),
+        curve: Curves.easeOut,
+      );
+    }
+  }
+
+  void _sendMessage() {
+    final text = _messageController.text.trim();
+    if (text.isEmpty) return;
+
+    try {
+      context.read<DirectMessagesProvider>().sendMessage(
+        conversationId: widget.conversation.id,
+        body: text,
+      );
+      _messageController.clear();
+      Future.delayed(const Duration(milliseconds: 100), _scrollToBottom);
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Failed to send message: ${e.toString().replaceAll('Exception: ', '')}',
+          ),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final provider = context.watch<DirectMessagesProvider>();
+    final authProvider = context.watch<AuthProvider>();
+    final currentUserId = authProvider.user?.id;
+    final otherUser = widget.conversation.otherUser;
+
+    final displayName =
+        (otherUser.displayName != null && otherUser.displayName!.trim().isNotEmpty)
+            ? otherUser.displayName!.trim()
+            : otherUser.username;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (provider.messages.isNotEmpty) {
+        _scrollToBottom();
+      }
+    });
+
+    return Scaffold(
+      backgroundColor: const Color(0xFFF7F8FC),
+      appBar: AppBar(
+        titleSpacing: 0,
+        title: Row(
+          children: [
+            CircleAvatar(
+              radius: 20,
+              backgroundColor: const Color(0xFFEDE9FE),
+              backgroundImage: (otherUser.avatarUrl != null &&
+                      otherUser.avatarUrl!.trim().isNotEmpty)
+                  ? NetworkImage(otherUser.avatarUrl!)
+                  : null,
+              child: (otherUser.avatarUrl == null ||
+                      otherUser.avatarUrl!.trim().isEmpty)
+                  ? Text(
+                      displayName.isNotEmpty
+                          ? displayName[0].toUpperCase()
+                          : '?',
+                      style: const TextStyle(
+                        color: Color(0xFF5B21B6),
+                        fontWeight: FontWeight.bold,
+                      ),
+                    )
+                  : null,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    displayName,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                  Text(
+                    provider.isConnected ? 'Online connection ready' : 'Connecting...',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: provider.isConnected ? Colors.green : Colors.grey,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+      body: Column(
+        children: [
+          Expanded(
+            child: provider.isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : provider.error != null
+                    ? Center(child: Text('Error: ${provider.error}'))
+                    : provider.messages.isEmpty
+                        ? const Center(
+                            child: Padding(
+                              padding: EdgeInsets.all(24),
+                              child: Text(
+                                'No messages yet.\nSay hello and start the conversation.',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(fontSize: 16),
+                              ),
+                            ),
+                          )
+                        : ListView.builder(
+                            controller: _scrollController,
+                            padding: const EdgeInsets.all(16),
+                            itemCount: provider.messages.length,
+                            itemBuilder: (context, index) {
+                              final message = provider.messages[index];
+                              final isMe = message.senderId == currentUserId;
+
+                              return Align(
+                                alignment: isMe
+                                    ? Alignment.centerRight
+                                    : Alignment.centerLeft,
+                                child: Container(
+                                  constraints: BoxConstraints(
+                                    maxWidth:
+                                        MediaQuery.of(context).size.width * 0.72,
+                                  ),
+                                  margin: const EdgeInsets.only(bottom: 10),
+                                  child: Column(
+                                    crossAxisAlignment: isMe
+                                        ? CrossAxisAlignment.end
+                                        : CrossAxisAlignment.start,
+                                    children: [
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 16,
+                                          vertical: 12,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: isMe
+                                              ? const Color(0xFF4F46E5)
+                                              : Colors.white,
+                                          borderRadius: BorderRadius.only(
+                                            topLeft: const Radius.circular(20),
+                                            topRight: const Radius.circular(20),
+                                            bottomLeft: Radius.circular(isMe ? 20 : 6),
+                                            bottomRight: Radius.circular(isMe ? 6 : 20),
+                                          ),
+                                          boxShadow: [
+                                            BoxShadow(
+                                              color: Colors.black.withOpacity(0.05),
+                                              blurRadius: 12,
+                                              offset: const Offset(0, 6),
+                                            ),
+                                          ],
+                                        ),
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            if (message.body != null)
+                                              Text(
+                                                message.body!,
+                                                style: TextStyle(
+                                                  color: isMe
+                                                      ? Colors.white
+                                                      : Colors.black87,
+                                                  fontSize: 15,
+                                                ),
+                                              ),
+                                            if (message.mediaUrl != null)
+                                              Padding(
+                                                padding:
+                                                    const EdgeInsets.only(top: 8),
+                                                child: ClipRRect(
+                                                  borderRadius:
+                                                      BorderRadius.circular(14),
+                                                  child: Image.network(
+                                                    message.mediaUrl!,
+                                                    fit: BoxFit.cover,
+                                                  ),
+                                                ),
+                                              ),
+                                          ],
+                                        ),
+                                      ),
+                                      Padding(
+                                        padding: const EdgeInsets.only(
+                                          left: 10,
+                                          right: 10,
+                                          top: 4,
+                                        ),
+                                        child: Text(
+                                          DateFormat('HH:mm')
+                                              .format(message.createdAt.toLocal()),
+                                          style: TextStyle(
+                                            fontSize: 11,
+                                            color: Colors.grey[600],
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+          ),
+          SafeArea(
+            top: false,
+            child: Container(
+              padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.05),
+                    blurRadius: 14,
+                    offset: const Offset(0, -4),
+                  ),
+                ],
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _messageController,
+                      minLines: 1,
+                      maxLines: 4,
+                      textInputAction: TextInputAction.send,
+                      onSubmitted: (_) => _sendMessage(),
+                      decoration: InputDecoration(
+                        hintText: 'Message $displayName...',
+                        filled: true,
+                        fillColor: const Color(0xFFF4F4F5),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(22),
+                          borderSide: BorderSide.none,
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 12,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Container(
+                    decoration: const BoxDecoration(
+                      color: Color(0xFF4F46E5),
+                      shape: BoxShape.circle,
+                    ),
+                    child: IconButton(
+                      onPressed: provider.isJoinedRoom ? _sendMessage : null,
+                      icon: const Icon(Icons.send_rounded, color: Colors.white),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}

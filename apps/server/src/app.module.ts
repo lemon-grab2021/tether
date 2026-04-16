@@ -6,6 +6,8 @@ import { UsersModule } from './users/users.module';
 import { CirclesModule } from './circles/circles.module';
 import { MessagesModule } from './messages/messages.module';
 import { UploadsModule } from './uploads/uploads.module';
+import { LinksModule } from './links/links.module';
+import { DirectMessagesModule } from './direct-messages/direct-messages.module';
 
 @Module({
     imports: [
@@ -16,6 +18,8 @@ import { UploadsModule } from './uploads/uploads.module';
         AuthModule,
         UsersModule,
         CirclesModule,
+        LinksModule,
+        DirectMessagesModule,
         MessagesModule,
         UploadsModule,
     ],

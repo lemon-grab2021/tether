@@ -16,6 +16,11 @@ datasource db {
 // ============================================
 // AUTHENTICATION & USERS
 // ============================================
+enum LinkRequestStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+}
 
 model User {
   id           Int      @id @default(autoincrement())
@@ -32,8 +37,37 @@ model User {
   refreshTokens RefreshToken[]
   reports       Report[]
   auditLogs     AuditLog[]
+
+  sentLinkRequests     LinkRequest[] @relation("LinkRequestSender")
+  receivedLinkRequests LinkRequest[] @relation("LinkRequestReceiver")
+
+  directConversatioAsSender   DirectConversation[] @relation("DirectConversationUserOne")
+  directConversatioAsReceiver DirectConversation[] @relation("DirectConversationUserTwo")
+  sentDirectMessages          DirectMessage[]      @relation("DirectMessageSender")
 }
 
+// ============================================
+// LINKS & CONNECTIONS
+// ============================================
+model LinkRequest {
+  id          Int               @id @default(autoincrement())
+  senderId    Int
+  receiverId  Int
+  status      LinkRequestStatus @default(PENDING)
+  createdAt   DateTime          @default(now())
+  respondedAt DateTime?
+
+  sender   User @relation("LinkRequestSender", fields: [senderId], references: [id], onDelete: Cascade)
+  receiver User @relation("LinkRequestReceiver", fields: [receiverId], references: [id], onDelete: Cascade)
+
+  @@unique([senderId, receiverId])
+  @@index([senderId, status])
+  @@index([receiverId, status])
+}
+
+// ============================================
+// REFRESH TOKENS
+// ============================================
 model RefreshToken {
   id        Int      @id @default(autoincrement())
   token     String   @unique
@@ -41,6 +75,47 @@ model RefreshToken {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   expiresAt DateTime
   createdAt DateTime @default(now())
+}
+
+// ============================================
+// DIRECT MESSAGES
+// ============================================
+
+model DirectConversation {
+  id            Int       @id @default(autoincrement())
+  userOneId     Int
+  userTwoId     Int
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  lastMessageAt DateTime? @default(now())
+
+  userOne User @relation("DirectConversationUserOne", fields: [userOneId], references: [id], onDelete: Cascade)
+  userTwo User @relation("DirectConversationUserTwo", fields: [userTwoId], references: [id], onDelete: Cascade)
+
+  message DirectMessage[]
+
+  @@unique([userOneId, userTwoId])
+  @@index([userOneId, userTwoId])
+  @@index([userOneId])
+  @@index([userTwoId])
+  @@index([lastMessageAt])
+}
+
+model DirectMessage {
+  id             Int       @id @default(autoincrement())
+  conversationId Int
+  senderId       Int
+  body           String?
+  mediaUrl       String?
+  createdAt      DateTime  @default(now())
+  deletedAt      DateTime?
+  editedAt       DateTime?
+
+  conversation DirectConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender       User               @relation("DirectMessageSender", fields: [senderId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, createdAt]) // For efficient querying
+  @@index([senderId]) // For efficient querying
 }
 
 // ============================================

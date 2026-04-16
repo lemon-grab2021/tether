@@ -101,13 +101,6 @@ class _ChatScreenState extends State<ChatScreen> {
                 color: messagesProvider.isConnected ? Colors.green : Colors.grey,
               ),
             ),
-            Text(
-              messagesProvider.isJoinedRoom ? 'Joined room' : 'Joining room...',
-              style: TextStyle(
-                fontSize: 12,
-                color: messagesProvider.isJoinedRoom ? Colors.green : Colors.grey,
-              ),
-            ),
           ],
         ),
         actions: [

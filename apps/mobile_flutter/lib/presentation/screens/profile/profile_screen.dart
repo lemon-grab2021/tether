@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../providers/auth_provider.dart';
 import '../auth/login_screen.dart';
+import '../../widgets/app_avatar.dart';
+
 
 class ProfileScreen extends StatelessWidget {
   const ProfileScreen({super.key});
@@ -42,15 +44,10 @@ class ProfileScreen extends StatelessWidget {
         padding: const EdgeInsets.all(16),
         children: [
           Center(
-            child: CircleAvatar(
-              radius: 50,
-              backgroundImage: avatarUrl != null ? NetworkImage(avatarUrl) : null,
-              child: avatarUrl == null
-                  ? Text(
-                      initial,
-                      style: const TextStyle(fontSize: 40),
-                    )
-                  : null,
+            child: AppAvatar(
+              name: displayName,
+              avatarUrl: avatarUrl,
+              radius: 48,
             ),
           ),
           const SizedBox(height: 16),

@@ -4,6 +4,8 @@ import 'providers/auth_provider.dart';
 import 'providers/circles_provider.dart';
 import 'providers/messages_provider.dart';
 import 'presentation/screens/auth/login_screen.dart';
+import 'providers/direct_conversations_provider.dart';
+import 'providers/direct_messages_provider.dart';
 
 void main() {
   runApp(const MyApp());
@@ -19,6 +21,8 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => AuthProvider()),
         ChangeNotifierProvider(create: (_) => CirclesProvider()),
         ChangeNotifierProvider(create: (_) => MessagesProvider()),  
+        ChangeNotifierProvider(create: (_) => DirectConversationsProvider()),
+        ChangeNotifierProvider(create: (_) => DirectMessagesProvider()),
         ],
         child: MaterialApp(
           title: 'Tether',

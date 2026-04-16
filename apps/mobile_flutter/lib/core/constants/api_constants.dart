@@ -1,28 +1,57 @@
+import 'package:flutter/foundation.dart';
+
 class ApiConstants {
-  // Use localhost for Chrome/Web testing
-  static const String baseUrl = 'http://localhost:3000';
-  
+  static String get baseUrl {
+    if (kIsWeb) {
+      return 'http://localhost:3000';
+    }
+    return 'http://10.0.2.2:3000';
+  }
+
   // Auth endpoints
-  static const String register = '$baseUrl/auth/register';
-  static const String login = '$baseUrl/auth/login';
-  static const String refresh = '$baseUrl/auth/refresh';
-  static const String logout = '$baseUrl/auth/logout';
-  
+  static String get register => '$baseUrl/auth/register';
+  static String get login => '$baseUrl/auth/login';
+  static String get refresh => '$baseUrl/auth/refresh';
+  static String get logout => '$baseUrl/auth/logout';
+
   // User endpoints
-  static const String userMe = '$baseUrl/users/me';
-  
+  static String get userMe => '$baseUrl/users/me';
+
   // Circles endpoints
-  static const String circles = '$baseUrl/circles';
+  static String get circles => '$baseUrl/circles';
   static String circleById(int id) => '$baseUrl/circles/$id';
   static String circleInvite(int id) => '$baseUrl/circles/$id/invite';
-  static const String circleJoin = '$baseUrl/circles/join';
-  
-  // Messages endpoints
-  static String circleMessages(int circleId) => '$baseUrl/circles/$circleId/messages';
-  
+  static String get circleJoin => '$baseUrl/circles/join';
+
+  // Circle messages
+  static String circleMessages(int circleId) =>
+      '$baseUrl/circles/$circleId/messages';
+
+  // Links endpoints
+  static String get links => '$baseUrl/links';
+  static String get linkSearch => '$baseUrl/links/search';
+  static String get linkRequests => '$baseUrl/links/requests';
+  static String get incomingLinkRequests =>
+      '$baseUrl/links/requests/incoming';
+  static String get outgoingLinkRequests =>
+      '$baseUrl/links/requests/outgoing';
+  static String linkRequestById(int requestId) =>
+      '$baseUrl/links/requests/$requestId';
+  static String linkByUserId(int userId) => '$baseUrl/links/$userId';
+
+  // Direct conversations / direct messages
+  static String get directConversations => '$baseUrl/direct-conversations';
+  static String directConversationMessages(int conversationId) =>
+      '$baseUrl/direct-conversations/$conversationId/messages';
+
   // Uploads
-  static const String uploadRequest = '$baseUrl/uploads/request';
-  
+  static String get uploadRequest => '$baseUrl/uploads/request';
+
   // WebSocket
-  static const String socketUrl = 'http://localhost:3000';
+  static String get socketUrl {
+    if (kIsWeb) {
+      return 'http://localhost:3000';
+    }
+    return 'http://10.0.2.2:3000';
+  }
 }
