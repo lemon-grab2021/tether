@@ -82,4 +82,19 @@ class CirclesProvider extends ChangeNotifier {
 
     return circle;
   }
+
+
+  Future<void> refreshCirclesSilently() async {
+    try {
+      final token = await _authService.getAccessToken();
+      if (token == null) return;
+
+      final newCircles = await _circlesService.getUserCircles(token);
+      _circles = newCircles;
+      _error = null;
+      notifyListeners();
+    } catch (_) {
+      // keep old circles on screen during background refresh
+    }
+  }
 }

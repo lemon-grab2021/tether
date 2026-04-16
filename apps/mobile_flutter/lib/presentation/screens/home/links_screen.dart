@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:tether/providers/direct_conversations_provider.dart';
 import '../../../providers/auth_provider.dart';
 import '../../../providers/links_provider.dart';
 import '../../../providers/direct_messages_provider.dart';
@@ -8,19 +9,23 @@ import '../../../data/services/auth_service.dart';
 import '../../../data/services/direct_messages_service.dart';
 import '../chat/direct_chat_screen.dart';
 import '../../widgets/app_avatar.dart';
+import 'dart:async';
+
 
 class LinksScreen extends StatefulWidget {
   const LinksScreen({super.key});
 
   @override
   State<LinksScreen> createState() => _LinksScreenState();
+  
 }
 
 class _LinksScreenState extends State<LinksScreen> {
   final _searchController = TextEditingController();
   final _directMessagesService = DirectMessagesService();
   final _authService = AuthService();
-
+  
+  Timer? _refreshTimer;
   @override
   void initState() {
     super.initState();
@@ -29,10 +34,19 @@ class _LinksScreenState extends State<LinksScreen> {
       provider.loadLinks();
       provider.loadRequests();
     });
+
+    // periodic refresh every 5 seconds
+    _refreshTimer = Timer.periodic(const Duration(seconds: 5),  (_) {
+      if (!mounted) return;
+      final provider = context.read<LinksProvider>();
+      provider.loadLinks();
+      provider.loadRequests();
+    });
   }
 
   @override
   void dispose() {
+    _refreshTimer?.cancel();
     _searchController.dispose();
     super.dispose();
   }
@@ -48,6 +62,14 @@ class _LinksScreenState extends State<LinksScreen> {
       currentUserId: currentUserId,
     );
 
+    // Refresh Home Screens dm list immediately after creating a new conversation 
+    if (context.mounted){ 
+      // ignore: use_build_context_synchronously
+      await context.read<DirectConversationsProvider>().loadConversations(
+        currentUserId: currentUserId,
+      );
+    }
+
     if (!mounted) return;
 
     Navigator.push(
@@ -59,8 +81,16 @@ class _LinksScreenState extends State<LinksScreen> {
         ),
       ),
     );
+
+    // Refresh again after returning to the chat screen so the latest messages show up
+    if (!mounted) return;
+    await context.read<DirectConversationsProvider>().loadConversations(
+      currentUserId: currentUserId,
+    );
+
   }
 
+  
   String _displayName(LinkUser user) {
     if (user.displayName != null && user.displayName!.trim().isNotEmpty) {
       return user.displayName!;

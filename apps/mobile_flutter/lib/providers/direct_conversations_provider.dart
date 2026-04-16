@@ -38,6 +38,26 @@ class DirectConversationsProvider extends ChangeNotifier {
     }
   }
 
+  Future<void> refreshConversationsSilently({
+    required int currentUserId,
+  }) async {
+    try {
+      final token = await _authService.getAccessToken();
+      if (token == null) return;
+
+      final newConversations = await _directMessagesService.getConversations(
+        token: token,
+        currentUserId: currentUserId,
+      );
+
+      _conversations = newConversations;
+      _error = null;
+      notifyListeners();
+    } catch (_) {
+      // Keep current conversations visible during background refresh
+    }
+  }
+
   void clear() {
     _conversations = [];
     _error = null;

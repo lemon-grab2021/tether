@@ -52,11 +52,22 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
   }
 
   void _sendMessage() {
+    final provider = context.read<DirectMessagesProvider>();
     final text = _messageController.text.trim();
     if (text.isEmpty) return;
 
+    if (!provider.isJoinedRoom) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please wait a moment and try again.'),
+          backgroundColor: Colors.grey,
+        ),
+      );
+      return;
+    }
+
     try {
-      context.read<DirectMessagesProvider>().sendMessage(
+      provider.sendMessage(
         conversationId: widget.conversation.id,
         body: text,
       );
@@ -129,10 +140,10 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
                     style: const TextStyle(fontWeight: FontWeight.w700),
                   ),
                   Text(
-                    provider.isConnected ? 'Online connection ready' : 'Connecting...',
+                    provider.isJoinedRoom ? 'Online' : provider.isConnected ? 'Joining Conversation...': 'Connecting...',
                     style: TextStyle(
                       fontSize: 12,
-                      color: provider.isConnected ? Colors.green : Colors.grey,
+                      color: provider.isJoinedRoom ? Colors.green : Colors.grey,
                     ),
                   ),
                 ],

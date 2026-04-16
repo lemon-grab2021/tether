@@ -12,6 +12,7 @@ import '../chat/direct_chat_screen.dart';
 import '../../widgets/create_circle_dialog.dart';
 import '../../widgets/join_circle_dialog.dart';
 import '../../widgets/app_avatar.dart';
+import 'dart:async';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -21,27 +22,44 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
+  Timer? _refreshTimer;
+  
   @override
   void initState() {
     super.initState();
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final circlesProvider = context.read<CirclesProvider>();
-      final authProvider = context.read<AuthProvider>();
       final directConversationsProvider =
           context.read<DirectConversationsProvider>();
 
       circlesProvider.loadCircles();
 
-      final currentUserId = authProvider.user?.id;
-      if (currentUserId != null) {
-        directConversationsProvider.loadConversations(
-          currentUserId: currentUserId,
-        );
+      // periodic refresh every 5 seconds
+      _refreshTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+        if (!mounted) return;
+
+        final authProvider = context.read<AuthProvider>();
+        final currentUserId = authProvider.user?.id;
+
+        context.read<CirclesProvider>().refreshCirclesSilently();
+        
+        if (currentUserId != null) {
+          context.read<DirectConversationsProvider>().refreshConversationsSilently(
+            currentUserId: currentUserId,
+          );
       }
     });
-  }
+    });
+  
+}
 
+    @override
+    void dispose() {
+      _refreshTimer?.cancel();
+      super.dispose();
+    }
+      
   Future<void> _refreshHome() async {
     final circlesProvider = context.read<CirclesProvider>();
     final authProvider = context.read<AuthProvider>();
@@ -84,8 +102,8 @@ class _HomeScreenState extends State<HomeScreen> {
           IconButton(
             tooltip: 'Links',
             icon: const Icon(Icons.people_alt_outlined),
-            onPressed: () {
-              Navigator.push(
+            onPressed: () async {
+             await Navigator.push(
                 context,
                 MaterialPageRoute(
                   builder: (_) => ChangeNotifierProvider(
@@ -94,6 +112,13 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 ),
               );
+              if (!mounted) return;
+              final currentUserId = context.read<AuthProvider>().user?.id;
+              if (currentUserId != null) {
+                await context.read<DirectConversationsProvider>().loadConversations(
+                  currentUserId: currentUserId,
+                ); 
+              }
             },
           ),
           IconButton(
@@ -185,8 +210,8 @@ class _HomeScreenState extends State<HomeScreen> {
                   _QuickActionButton(
                     icon: Icons.person_add_alt_1_outlined,
                     label: 'Open Links',
-                    onTap: () {
-                      Navigator.push(
+                    onTap: () async {
+                     await Navigator.push(
                         context,
                         MaterialPageRoute(
                           builder: (_) => ChangeNotifierProvider(
@@ -195,6 +220,14 @@ class _HomeScreenState extends State<HomeScreen> {
                           ),
                         ),
                       );
+                      
+                      if (!mounted) return;
+                      final currentUserId = context.read<AuthProvider>().user?.id;  
+                      if (currentUserId != null) {
+                        await context.read<DirectConversationsProvider>().loadConversations(
+                          currentUserId: currentUserId,
+                        ); 
+                      }
                     },
                   ),
                 ],
@@ -238,8 +271,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 title: 'No direct messages yet',
                 subtitle: 'Start a conversation from Links.',
                 actionLabel: 'Open Links',
-                onAction: () {
-                  Navigator.push(
+                onAction: () async {
+                  await Navigator.push(
                     context,
                     MaterialPageRoute(
                       builder: (_) => ChangeNotifierProvider(
@@ -248,6 +281,14 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                     ),
                   );
+                  if (!mounted) return;
+                  // ignore: use_build_context_synchronously
+                  final currentUserId = context.read<AuthProvider>().user?.id;
+                  if (currentUserId != null) {
+                    await context.read<DirectConversationsProvider>().loadConversations(
+                      currentUserId: currentUserId,
+                    ); 
+                  } 
                 },
               )
             else

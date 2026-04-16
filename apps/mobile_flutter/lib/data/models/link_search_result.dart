@@ -13,9 +13,13 @@ class LinkSearchResult {
 
   factory LinkSearchResult.fromJson(Map<String, dynamic> json) {
     return LinkSearchResult(
-      user: LinkUser.fromJson(Map<String, dynamic>.from(json['user'])),
+      user: LinkUser.fromJson(json),
       relationship: json['relationship']?.toString() ?? 'none',
-      requestId: json['requestId'] != null ? (json['requestId'] is int ? json['requestId'] : int.parse(json['requestId'].toString())) : null,
+      requestId: json['requestId'] != null
+          ? (json['requestId'] is int
+              ? json['requestId']
+              : int.parse(json['requestId'].toString()))
+          : null,
     );
-  } 
+  }
 }
