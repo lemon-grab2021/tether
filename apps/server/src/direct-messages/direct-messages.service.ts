@@ -2,6 +2,7 @@ import {
     BadRequestException,
     Injectable,
     ForbiddenException,
+    NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateDirectConversationDto } from './dto/create-direct-message.dto';
@@ -9,7 +10,7 @@ import { SendDirectMessageDto } from './dto/send-direct-messages.dto';
 
 @Injectable()
 export class DirectMessagesService {
-    constructor(private prisma: PrismaService) { }
+    constructor(private readonly prisma: PrismaService) { }
 
     private readonly userSelect = {
         id: true,
@@ -110,7 +111,7 @@ export class DirectMessagesService {
         return this.prisma.directMessage.findMany({
             where: {
                 conversationId,
-                deletedAt: null,
+                // tombstones are visible
             },
             include: {
                 sender: {
@@ -120,6 +121,50 @@ export class DirectMessagesService {
             orderBy: { createdAt: 'asc' },
             take: limit,
             ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
+        });
+    }
+
+    async editMessage(messageId: number, userId: number, body: string) {
+        const message = await this.prisma.directMessage.findUnique({
+            where: { id: messageId },
+            include: {
+                sender: { select: this.userSelect },
+            },
+        });
+
+        if (!message) {
+            throw new NotFoundException('Direct message not found');
+        }
+
+        const allowed = await this.isParticipant(message.conversationId, userId);
+        if (!allowed) {
+            throw new ForbiddenException('You are not a participant in this conversation');
+        }
+
+        if (message.senderId !== userId) {
+            throw new ForbiddenException('You can only edit your own messages');
+        }
+
+        if (message.deletedAt) {
+            throw new BadRequestException('Deleted messages cannot be edited');
+        }
+
+        const trimmed = body.trim();
+        if (!trimmed && !message.mediaUrl) {
+            throw new BadRequestException('Message must contain text or media');
+        }
+
+        return this.prisma.directMessage.update({
+            where: { id: messageId },
+            data: {
+                body: trimmed,
+                editedAt: new Date(),
+            },
+            include: {
+                sender: {
+                    select: this.userSelect,
+                },
+            },
         });
     }
 
@@ -154,5 +199,45 @@ export class DirectMessagesService {
         });
 
         return result;
+    }
+
+    async deleteMessage(messageId: number, userId: number) {
+        const message = await this.prisma.directMessage.findUnique({
+            where: { id: messageId },
+            include: {
+                sender: { select: this.userSelect },
+            },
+        });
+
+        if (!message) {
+            throw new NotFoundException('Direct message not found');
+        }
+
+        const allowed = await this.isParticipant(message.conversationId, userId);
+        if (!allowed) {
+            throw new ForbiddenException('You are not a participant in this conversation');
+        }
+
+        if (message.senderId !== userId) {
+            throw new ForbiddenException('You can only delete your own messages');
+        }
+
+        if (message.deletedAt) {
+            return message;
+        }
+
+        return this.prisma.directMessage.update({
+            where: { id: messageId },
+            data: {
+                body: null,
+                mediaUrl: null,
+                deletedAt: new Date(),
+            },
+            include: {
+                sender: {
+                    select: this.userSelect,
+                },
+            },
+        });
     }
 }

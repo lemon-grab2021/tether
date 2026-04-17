@@ -2,13 +2,15 @@ import { Controller, Get, Post, Patch, Delete, Body, Param, Query, UseGuards, Re
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { MessagesService } from './messages.service';
 import { SendMessageDto } from './dto/send-message.dto';
-import { GetMessagesDto } from './dto/get-messages.dto';
 import { CircleMemberGuard } from 'src/circles/guards/circle-member.guard';
+import { dot } from 'node:test/reporters';
+import { UpdateMessageDto } from 'src/auth/dto/update-message.dto';
+import { MessagesGateway } from './messages.gateway';
 
 @Controller('circles/:circleId/messages')
 @UseGuards(JwtAuthGuard, CircleMemberGuard)
 export class MessagesController {
-    constructor(private readonly messagesService: MessagesService) { }
+    constructor(private readonly messagesService: MessagesService, private readonly messagesGateway: MessagesGateway) { }
 
     // Get message history (paginated)
     @Get()
@@ -36,22 +38,35 @@ export class MessagesController {
         });
     }
 
-    // Edit message
     @Patch(':messageId')
     async editMessage(
-        @Param('messageId') messageId: string,
-        @Body() body: { body: string },
+        @Param('messageId', ParseIntPipe) messageId: number,
+        @Body() dto: UpdateMessageDto,
         @Request() req: any,
     ) {
-        return this.messagesService.editMessage(parseInt(messageId), req.user.id, body.body);
+        const updated = await this.messagesService.editMessage(
+            messageId,
+            req.user.id,
+            dto.body ?? '',
+        );
+
+        this.messagesGateway.broadcastMessageUpdated(updated);
+
+        return updated;
     }
 
-    // Delete message
     @Delete(':messageId')
     async deleteMessage(
         @Param('messageId', ParseIntPipe) messageId: number,
         @Request() req: any,
     ) {
-        return this.messagesService.deleteMessage(messageId, req.user.id);
+        const deleted = await this.messagesService.deleteMessage(
+            messageId,
+            req.user.id,
+        );
+
+        this.messagesGateway.broadcastMessageDeleted(deleted);
+
+        return deleted;
     }
 }

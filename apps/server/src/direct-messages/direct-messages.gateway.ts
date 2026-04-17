@@ -11,7 +11,7 @@ import { Server, Socket } from 'socket.io';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { DirectMessagesService } from './direct-messages.service';
-import { SendDirectMessageDto } from './dto/send-direct-messages.dto'
+import { SendDirectMessageDto } from './dto/send-direct-messages.dto';
 
 interface AuthenticatedSocket extends Socket {
     user?: {
@@ -27,7 +27,8 @@ interface AuthenticatedSocket extends Socket {
         credentials: true,
     },
 })
-export class DirectMessagesGateway implements OnGatewayConnection, OnGatewayDisconnect {
+export class DirectMessagesGateway
+    implements OnGatewayConnection, OnGatewayDisconnect {
     @WebSocketServer()
     server!: Server;
 
@@ -36,6 +37,28 @@ export class DirectMessagesGateway implements OnGatewayConnection, OnGatewayDisc
         private readonly jwtService: JwtService,
         private readonly config: ConfigService,
     ) { }
+
+    private roomName(conversationId: number) {
+        return `direct:${conversationId}`;
+    }
+
+    broadcastMessageNew(message: { conversationId: number }) {
+        this.server
+            .to(this.roomName(message.conversationId))
+            .emit('direct:message:new', message);
+    }
+
+    broadcastMessageUpdated(message: { conversationId: number }) {
+        this.server
+            .to(this.roomName(message.conversationId))
+            .emit('direct:message:updated', message);
+    }
+
+    broadcastMessageDeleted(message: { conversationId: number }) {
+        this.server
+            .to(this.roomName(message.conversationId))
+            .emit('direct:message:deleted', message);
+    }
 
     async handleConnection(client: AuthenticatedSocket) {
         try {
@@ -61,7 +84,9 @@ export class DirectMessagesGateway implements OnGatewayConnection, OnGatewayDisc
     }
 
     handleDisconnect(client: AuthenticatedSocket) {
-        console.log(`Direct socket disconnected: ${client.id} (${client.user?.username ?? 'unknown'})`);
+        console.log(
+            `Direct socket disconnected: ${client.id} (${client.user?.username ?? 'unknown'})`,
+        );
     }
 
     @SubscribeMessage('direct:join')
@@ -73,12 +98,16 @@ export class DirectMessagesGateway implements OnGatewayConnection, OnGatewayDisc
             return { error: 'Not authenticated' };
         }
 
-        const allowed = await this.directMessagesService.isParticipant(data.conversationId, client.user.id);
+        const allowed = await this.directMessagesService.isParticipant(
+            data.conversationId,
+            client.user.id,
+        );
+
         if (!allowed) {
             return { error: 'Not a participant in this conversation' };
         }
 
-        const roomName = `direct:${data.conversationId}`;
+        const roomName = this.roomName(data.conversationId);
         await client.join(roomName);
 
         client.emit('direct:joined', { conversationId: data.conversationId });
@@ -94,11 +123,12 @@ export class DirectMessagesGateway implements OnGatewayConnection, OnGatewayDisc
             return { error: 'Not authenticated' };
         }
 
-        const message = await this.directMessagesService.sendMessage(client.user.id, dto);
+        const message = await this.directMessagesService.sendMessage(
+            client.user.id,
+            dto,
+        );
 
-        this.server
-            .to(`direct:${dto.conversationId}`)
-            .emit('direct:message:new', message);
+        this.broadcastMessageNew(message);
 
         return { success: true, message };
     }

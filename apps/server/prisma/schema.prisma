@@ -89,13 +89,15 @@ model DirectConversation {
   updatedAt     DateTime  @updatedAt
   lastMessageAt DateTime? @default(now())
 
+  userOneLastReadAt DateTime?
+  userTwoLastReadAt DateTime?
+
   userOne User @relation("DirectConversationUserOne", fields: [userOneId], references: [id], onDelete: Cascade)
   userTwo User @relation("DirectConversationUserTwo", fields: [userTwoId], references: [id], onDelete: Cascade)
 
-  message DirectMessage[]
+  messages DirectMessage[]
 
   @@unique([userOneId, userTwoId])
-  @@index([userOneId, userTwoId])
   @@index([userOneId])
   @@index([userTwoId])
   @@index([lastMessageAt])

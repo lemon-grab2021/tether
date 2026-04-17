@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:tether/providers/auth_provider.dart';
 import 'package:tether/providers/direct_messages_provider.dart';
 import '../../../data/models/direct_conversation.dart';
+import '../../../data/models/direct_message.dart';
 
 class DirectChatScreen extends StatefulWidget {
   final DirectConversation conversation;
@@ -85,6 +86,103 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
     }
   }
 
+  void _showMessageActions(DirectMessage message) {
+    showModalBottomSheet(
+      context: context,
+      builder: (_) {
+        return SafeArea(
+          child: Wrap(
+            children: [
+              ListTile(
+                leading: const Icon(Icons.edit_outlined),
+                title: const Text('Edit message'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _showEditDialog(message);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.delete_outline),
+                title: const Text('Delete message'),
+                onTap: () async {
+                  Navigator.pop(context);
+                  try {
+                    await context.read<DirectMessagesProvider>().deleteMessage(
+                          conversationId: widget.conversation.id,
+                          messageId: message.id,
+                        );
+                  } catch (e) {
+                    if (!mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          'Failed to delete message: ${e.toString().replaceAll('Exception: ', '')}',
+                        ),
+                        backgroundColor: Colors.red,
+                      ),
+                    );
+                  }
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  void _showEditDialog(DirectMessage message) {
+    final controller = TextEditingController(text: message.body ?? '');
+
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Edit message'),
+        content: TextField(
+          controller: controller,
+          maxLines: null,
+          decoration: const InputDecoration(
+            hintText: 'Update your message',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              final updatedText = controller.text.trim();
+              if (updatedText.isEmpty) return;
+
+              try {
+                await context.read<DirectMessagesProvider>().editMessage(
+                      conversationId: widget.conversation.id,
+                      messageId: message.id,
+                      body: updatedText,
+                    );
+
+                if (!mounted) return;
+                Navigator.pop(context);
+              } catch (e) {
+                if (!mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      'Failed to edit message: ${e.toString().replaceAll('Exception: ', '')}',
+                    ),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+              }
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<DirectMessagesProvider>();
@@ -92,10 +190,10 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
     final currentUserId = authProvider.user?.id;
     final otherUser = widget.conversation.otherUser;
 
-    final displayName =
-        (otherUser.displayName != null && otherUser.displayName!.trim().isNotEmpty)
-            ? otherUser.displayName!.trim()
-            : otherUser.username;
+    final displayName = (otherUser.displayName != null &&
+            otherUser.displayName!.trim().isNotEmpty)
+        ? otherUser.displayName!.trim()
+        : otherUser.username;
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (provider.messages.isNotEmpty) {
@@ -140,10 +238,16 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
                     style: const TextStyle(fontWeight: FontWeight.w700),
                   ),
                   Text(
-                    provider.isJoinedRoom ? 'Online' : provider.isConnected ? 'Joining Conversation...': 'Connecting...',
+                    provider.isJoinedRoom
+                        ? 'Online'
+                        : provider.isConnected
+                            ? 'Joining Conversation...'
+                            : 'Connecting...',
                     style: TextStyle(
                       fontSize: 12,
-                      color: provider.isJoinedRoom ? Colors.green : Colors.grey,
+                      color: provider.isJoinedRoom
+                          ? Colors.green
+                          : Colors.grey,
                     ),
                   ),
                 ],
@@ -177,6 +281,9 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
                             itemBuilder: (context, index) {
                               final message = provider.messages[index];
                               final isMe = message.senderId == currentUserId;
+                              final isDeleted = message.deletedAt != null;
+                              final isEdited =
+                                  message.editedAt != null && !isDeleted;
 
                               return Align(
                                 alignment: isMe
@@ -193,57 +300,87 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
                                         ? CrossAxisAlignment.end
                                         : CrossAxisAlignment.start,
                                     children: [
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 16,
-                                          vertical: 12,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: isMe
-                                              ? const Color(0xFF4F46E5)
-                                              : Colors.white,
-                                          borderRadius: BorderRadius.only(
-                                            topLeft: const Radius.circular(20),
-                                            topRight: const Radius.circular(20),
-                                            bottomLeft: Radius.circular(isMe ? 20 : 6),
-                                            bottomRight: Radius.circular(isMe ? 6 : 20),
+                                      GestureDetector(
+                                        onLongPress:
+                                            isMe && !isDeleted
+                                                ? () =>
+                                                    _showMessageActions(message)
+                                                : null,
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 16,
+                                            vertical: 12,
                                           ),
-                                          boxShadow: [
-                                            BoxShadow(
-                                              color: Colors.black.withOpacity(0.05),
-                                              blurRadius: 12,
-                                              offset: const Offset(0, 6),
+                                          decoration: BoxDecoration(
+                                            color: isDeleted
+                                                ? (isMe
+                                                    ? const Color(0xFF818CF8)
+                                                    : Colors.grey.shade200)
+                                                : (isMe
+                                                    ? const Color(0xFF4F46E5)
+                                                    : Colors.white),
+                                            borderRadius: BorderRadius.only(
+                                              topLeft:
+                                                  const Radius.circular(20),
+                                              topRight:
+                                                  const Radius.circular(20),
+                                              bottomLeft: Radius.circular(
+                                                  isMe ? 20 : 6),
+                                              bottomRight: Radius.circular(
+                                                  isMe ? 6 : 20),
                                             ),
-                                          ],
-                                        ),
-                                        child: Column(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.start,
-                                          children: [
-                                            if (message.body != null)
-                                              Text(
-                                                message.body!,
-                                                style: TextStyle(
-                                                  color: isMe
-                                                      ? Colors.white
-                                                      : Colors.black87,
-                                                  fontSize: 15,
-                                                ),
+                                            boxShadow: [
+                                              BoxShadow(
+                                                color: Colors.black
+                                                    .withOpacity(0.05),
+                                                blurRadius: 12,
+                                                offset: const Offset(0, 6),
                                               ),
-                                            if (message.mediaUrl != null)
-                                              Padding(
-                                                padding:
-                                                    const EdgeInsets.only(top: 8),
-                                                child: ClipRRect(
-                                                  borderRadius:
-                                                      BorderRadius.circular(14),
-                                                  child: Image.network(
-                                                    message.mediaUrl!,
-                                                    fit: BoxFit.cover,
+                                            ],
+                                          ),
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              if (isDeleted)
+                                                Text(
+                                                  'Message deleted',
+                                                  style: TextStyle(
+                                                    fontStyle: FontStyle.italic,
+                                                    color: isMe
+                                                        ? Colors.white70
+                                                        : Colors.black54,
                                                   ),
-                                                ),
-                                              ),
-                                          ],
+                                                )
+                                              else ...[
+                                                if (message.body != null)
+                                                  Text(
+                                                    message.body!,
+                                                    style: TextStyle(
+                                                      color: isMe
+                                                          ? Colors.white
+                                                          : Colors.black87,
+                                                      fontSize: 15,
+                                                    ),
+                                                  ),
+                                                if (message.mediaUrl != null)
+                                                  Padding(
+                                                    padding:
+                                                        const EdgeInsets.only(
+                                                            top: 8),
+                                                    child: ClipRRect(
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                              14),
+                                                      child: Image.network(
+                                                        message.mediaUrl!,
+                                                        fit: BoxFit.cover,
+                                                      ),
+                                                    ),
+                                                  ),
+                                              ],
+                                            ],
+                                          ),
                                         ),
                                       ),
                                       Padding(
@@ -253,8 +390,8 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
                                           top: 4,
                                         ),
                                         child: Text(
-                                          DateFormat('HH:mm')
-                                              .format(message.createdAt.toLocal()),
+                                          '${DateFormat('HH:mm').format(message.createdAt.toLocal())}'
+                                          '${isEdited ? ' • edited' : ''}',
                                           style: TextStyle(
                                             fontSize: 11,
                                             color: Colors.grey[600],
@@ -314,7 +451,8 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
                     ),
                     child: IconButton(
                       onPressed: provider.isJoinedRoom ? _sendMessage : null,
-                      icon: const Icon(Icons.send_rounded, color: Colors.white),
+                      icon:
+                          const Icon(Icons.send_rounded, color: Colors.white),
                     ),
                   ),
                 ],

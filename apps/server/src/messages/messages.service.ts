@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CirclesService } from '../circles/circles.service';
 import { SendMessageDto } from './dto/send-message.dto';
@@ -6,9 +6,16 @@ import { SendMessageDto } from './dto/send-message.dto';
 @Injectable()
 export class MessagesService {
     constructor(
-        private prisma: PrismaService,
+        private readonly prisma: PrismaService,
         private circlesService: CirclesService,
     ) { }
+
+    private readonly userselect = {
+        id: true,
+        username: true,
+        displayname: true,
+        avatarUrl: true,
+    };
 
     // Send a message to a circle
     async createMessage(userId: number, dto: SendMessageDto) {
@@ -122,6 +129,9 @@ export class MessagesService {
     async editMessage(messageId: number, userId: number, body: string) {
         const message = await this.prisma.message.findUnique({
             where: { id: messageId },
+            include: {
+                sender: { select: this.userselect },
+            },
         });
 
         if (!message) {
@@ -136,20 +146,20 @@ export class MessagesService {
             throw new ForbiddenException('Cannot edit deleted message');
         }
 
+        const trimmed = body.trim();
+        if (!trimmed && !message.mediaUrl) {
+            throw new BadRequestException('Message must contain text or media');
+        }
+
         return this.prisma.message.update({
             where: { id: messageId },
             data: {
-                body,
+                body: trimmed,
                 editedAt: new Date(),
             },
             include: {
                 sender: {
-                    select: {
-                        id: true,
-                        username: true,
-                        displayName: true,
-                        avatarUrl: true,
-                    },
+                    select: this.userselect,
                 },
             },
         });
@@ -159,28 +169,40 @@ export class MessagesService {
     async deleteMessage(messageId: number, userId: number) {
         const message = await this.prisma.message.findUnique({
             where: { id: messageId },
-            include: { circle: true },
+            include: {
+                sender: { select: this.userselect },
+            },
         });
 
         if (!message) {
             throw new NotFoundException('Message not found');
         }
 
-        // Check if user is the author
         const isAuthor = message.senderId === userId;
 
-        // Check if user is a moderator/owner
         const userRole = await this.circlesService.getUserRole(message.circleId, userId);
         const isModerator = userRole === 'OWNER' || userRole === 'MODERATOR';
 
         if (!isAuthor && !isModerator) {
-            throw new ForbiddenException('You can only delete your own messages or you must be a moderator');
+            throw new ForbiddenException(
+                'You can only delete your own messages or you must be a moderator',
+            );
         }
 
-        // Soft delete
+        if (message.deletedAt) {
+            return message;
+        }
+
         return this.prisma.message.update({
             where: { id: messageId },
-            data: { deletedAt: new Date() },
+            data: {
+                body: null,
+                mediaUrl: null,
+                deletedAt: new Date(),
+            },
+            include: {
+                sender: { select: this.userselect },
+            },
         });
     }
 }

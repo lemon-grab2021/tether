@@ -39,6 +39,49 @@ class MessagesService {
     }
   }
 
+// Edit Message
+  Future<Message> editMessage({
+  required String token,
+  required int circleId,
+  required int messageId,
+  required String body,
+}) async {
+  final response = await http.patch(
+    Uri.parse('${ApiConstants.baseUrl}/circles/$circleId/messages/$messageId'),
+    headers: {
+      'Authorization': 'Bearer $token',
+      'Content-Type': 'application/json',
+    },
+    body: jsonEncode({'body': body}),
+  );
+
+  if (response.statusCode < 200 || response.statusCode >= 300) {
+    throw Exception('Failed to edit message');
+  }
+
+  return Message.fromJson(Map<String, dynamic>.from(jsonDecode(response.body)));
+}
+
+// Delete Message
+Future<Message> deleteMessage({
+  required String token,
+  required int circleId,
+  required int messageId,
+}) async {
+  final response = await http.delete(
+    Uri.parse('${ApiConstants.baseUrl}/circles/$circleId/messages/$messageId'),
+    headers: {
+      'Authorization': 'Bearer $token',
+    },
+  );
+
+  if (response.statusCode < 200 || response.statusCode >= 300) {
+    throw Exception('Failed to delete message');
+  }
+
+  return Message.fromJson(Map<String, dynamic>.from(jsonDecode(response.body)));
+}
+
   // Send message via REST (not WebSocket)
   Future<Message> sendMessage({
     required String token,

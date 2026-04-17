@@ -33,9 +33,7 @@ class DirectMessagesService {
   }) async {
     final response = await http.get(
       Uri.parse('${ApiConstants.baseUrl}/direct-conversations'),
-      headers: {
-        'Authorization': 'Bearer $token',
-      },
+      headers: {'Authorization': 'Bearer $token'},
     );
 
     if (response.statusCode < 200 || response.statusCode >= 300) {
@@ -44,7 +42,12 @@ class DirectMessagesService {
 
     final data = jsonDecode(response.body) as List<dynamic>;
     return data
-        .map((e) => DirectConversation.fromJson(Map<String, dynamic>.from(e), currentUserId))
+        .map(
+          (e) => DirectConversation.fromJson(
+            Map<String, dynamic>.from(e),
+            currentUserId,
+          ),
+        )
         .toList();
   }
 
@@ -60,9 +63,7 @@ class DirectMessagesService {
 
     final response = await http.get(
       uri,
-      headers: {
-        'Authorization': 'Bearer $token',
-      },
+      headers: {'Authorization': 'Bearer $token'},
     );
 
     if (response.statusCode < 200 || response.statusCode >= 300) {
@@ -73,5 +74,52 @@ class DirectMessagesService {
     return data
         .map((e) => DirectMessage.fromJson(Map<String, dynamic>.from(e)))
         .toList();
+  }
+
+  Future<DirectMessage> editMessage({
+    required String token,
+    required int conversationId,
+    required int messageId,
+    required String body,
+  }) async {
+    final response = await http.patch(
+      Uri.parse(
+        '${ApiConstants.baseUrl}/direct-conversations/$conversationId/messages/$messageId',
+      ),
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode({'body': body}),
+    );
+
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception('Failed to edit direct message');
+    }
+
+    return DirectMessage.fromJson(
+      Map<String, dynamic>.from(jsonDecode(response.body)),
+    );
+  }
+
+  Future<DirectMessage> deleteMessage({
+    required String token,
+    required int conversationId,
+    required int messageId,
+  }) async {
+    final response = await http.delete(
+      Uri.parse(
+        '${ApiConstants.baseUrl}/direct-conversations/$conversationId/messages/$messageId',
+      ),
+      headers: {'Authorization': 'Bearer $token'},
+    );
+
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception('Failed to delete direct message');
+    }
+
+    return DirectMessage.fromJson(
+      Map<String, dynamic>.from(jsonDecode(response.body)),
+    );
   }
 }

@@ -5,6 +5,8 @@ import {
     Param,
     ParseIntPipe,
     Post,
+    Patch,
+    Delete,
     Query,
     Request,
     UseGuards,
@@ -14,11 +16,13 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { DirectMessagesService } from './direct-messages.service';
 import { CreateDirectConversationDto } from './dto/create-direct-message.dto';
 import { SendDirectMessageDto } from './dto/send-direct-messages.dto'
+import { UpdateMessageDto } from 'src/auth/dto/update-message.dto';
+import { DirectMessagesGateway } from './direct-messages.gateway';
 
 @Controller('direct-conversations')
 @UseGuards(JwtAuthGuard)
 export class DirectMessagesController {
-    constructor(private readonly directMessagesService: DirectMessagesService) { }
+    constructor(private readonly directMessagesService: DirectMessagesService, private readonly directMessagesGateway: DirectMessagesGateway,) { }
 
     @Post()
     async createOrGetConversation(
@@ -57,5 +61,37 @@ export class DirectMessagesController {
         };
 
         return this.directMessagesService.sendMessage(req.user.id, dto);
+    }
+
+    @Patch(':conversationId/messages/:messageId')
+    async editMessage(
+        @Request() req: any,
+        @Param('messageId', ParseIntPipe) messageId: number,
+        @Body() dto: UpdateMessageDto,
+    ) {
+        const updated = await this.directMessagesService.editMessage(
+            messageId,
+            req.user.id,
+            dto.body ?? '',
+        );
+
+        this.directMessagesGateway.broadcastMessageUpdated(updated);
+
+        return updated;
+    }
+
+    @Delete(':conversationId/messages/:messageId')
+    async deleteMessage(
+        @Request() req: any,
+        @Param('messageId', ParseIntPipe) messageId: number,
+    ) {
+        const deleted = await this.directMessagesService.deleteMessage(
+            messageId,
+            req.user.id,
+        );
+
+        this.directMessagesGateway.broadcastMessageDeleted(deleted);
+
+        return deleted;
     }
 }

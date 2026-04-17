@@ -3,7 +3,7 @@ import { JwtModule } from '@nestjs/jwt';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { MessagesService } from './messages.service';
 import { MessagesController } from './messages.controller';
-import { MessagesGateway } from './gateway/messages.gateway';
+import { MessagesGateway } from './messages.gateway';
 import { CirclesModule } from '../circles/circles.module';
 import { AuthModule } from '../auth/auth.module';
 

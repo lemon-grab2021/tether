@@ -55,6 +55,48 @@ class DirectMessagesProvider extends ChangeNotifier {
     }
   }
 
+  Future<void> editMessage({
+    required int conversationId,
+    required int messageId,
+    required String body,
+  }) async {
+    final token = await _authService.getAccessToken();
+    if (token == null) throw Exception('Not authenticated');
+
+    final updated = await _service.editMessage(
+      token: token,
+      conversationId: conversationId,
+      messageId: messageId,
+      body: body,
+    );
+
+    final index = _messages.indexWhere((m) => m.id == messageId);
+    if (index != -1) {
+      _messages[index] = updated;
+      notifyListeners();
+    }
+  }
+
+  Future<void> deleteMessage({
+    required int conversationId,
+    required int messageId,
+  }) async {
+    final token = await _authService.getAccessToken();
+    if (token == null) throw Exception('Not authenticated');
+
+    final deleted = await _service.deleteMessage(
+      token: token,
+      conversationId: conversationId,
+      messageId: messageId,
+    );
+
+    final index = _messages.indexWhere((m) => m.id == messageId);
+    if (index != -1) {
+      _messages[index] = deleted;
+      notifyListeners();
+    }
+  }
+
   Future<void> connectToConversation(int conversationId) async {
     final token = await _authService.getAccessToken();
     if (token == null) throw Exception('Not authenticated');
@@ -94,6 +136,38 @@ class DirectMessagesProvider extends ChangeNotifier {
       _messages.add(message);
       _messages.sort((a, b) => a.createdAt.compareTo(b.createdAt));
       notifyListeners();
+    });
+
+    _socket!.on('message:updated', (data) {
+      try {
+        final updated = DirectMessage.fromJson(
+          Map<String, dynamic>.from(data as Map),
+        );
+
+        final index = _messages.indexWhere((m) => m.id == updated.id);
+        if (index != -1) {
+          _messages[index] = updated;
+          notifyListeners();
+        }
+      } catch (e) {
+        print('Failed to parse message:updated -> $e');
+      }
+    });
+
+    _socket!.on('message:deleted', (data) {
+      try {
+        final deleted = DirectMessage.fromJson(
+          Map<String, dynamic>.from(data as Map),
+        );
+
+        final index = _messages.indexWhere((m) => m.id == deleted.id);
+        if (index != -1) {
+          _messages[index] = deleted;
+          notifyListeners();
+        }
+      } catch (e) {
+        print('Failed to parse message:deleted -> $e');
+      }
     });
 
     _socket!.onDisconnect((_) {

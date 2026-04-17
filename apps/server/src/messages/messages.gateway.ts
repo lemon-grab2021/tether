@@ -10,9 +10,9 @@ import {
 import { Server, Socket } from 'socket.io';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
-import { MessagesService } from '../messages.service';
-import { CirclesService } from '../../circles/circles.service';
-import { SendMessageDto } from '../dto/send-message.dto';
+import { MessagesService } from './messages.service';
+import { CirclesService } from '../circles/circles.service';
+import { SendMessageDto } from './dto/send-message.dto';
 
 
 interface AuthenticatedSocket extends Socket {
@@ -220,4 +220,24 @@ export class MessagesGateway implements OnGatewayConnection, OnGatewayDisconnect
             isTyping: false,
         });
     }
+
+    broadcastMessageUpdated(message: { circleId: number }) {
+        this.server
+            .to(`circle:${message.circleId}`)
+            .emit('message:updated', message);
+    }
+
+    broadcastMessageDeleted(message: { circleId: number }) {
+        this.server
+            .to(`circle:${message.circleId}`)
+            .emit('message:deleted', message);
+    }
+
+    broadcastMessageNew(message: { circleId: number }) {
+        this.server
+            .to(`circle:${message.circleId}`)
+            .emit('message:new', message);
+    }
+
+
 }

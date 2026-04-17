@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:tether/providers/auth_provider.dart';
 import 'package:tether/providers/messages_provider.dart';
 import '../../../data/models/circle.dart';
+import '../../../data/models/message.dart';
 
 class ChatScreen extends StatefulWidget {
   final Circle circle;
@@ -11,7 +12,7 @@ class ChatScreen extends StatefulWidget {
   const ChatScreen({super.key, required this.circle});
 
   @override
-  State<ChatScreen> createState() => _ChatScreenState();  
+  State<ChatScreen> createState() => _ChatScreenState();
 }
 
 class _ChatScreenState extends State<ChatScreen> {
@@ -23,19 +24,17 @@ class _ChatScreenState extends State<ChatScreen> {
   @override
   void initState() {
     super.initState();
-    // Load initial messages for the circle
     WidgetsBinding.instance.addPostFrameCallback((_) {
-     if (!mounted) return;
-     
+      if (!mounted) return;
+
       messagesProvider = context.read<MessagesProvider>();
       messagesProvider!.loadMessages(widget.circle.id);
       messagesProvider!.connectToCircle(widget.circle.id);
-    }); 
+    });
+  }
 
-}
-
-  @override 
-  void dispose(){
+  @override
+  void dispose() {
     _messageController.dispose();
     _scrollController.dispose();
     messagesProvider?.disconnect();
@@ -52,27 +51,135 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
-  void _sendMessage(){
+  void _sendMessage() {
+    final provider = context.read<MessagesProvider>();
     final text = _messageController.text.trim();
     if (text.isEmpty) return;
 
+    if (!provider.isJoinedRoom) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please wait a moment and try again.'),
+          backgroundColor: Colors.grey,
+        ),
+      );
+      return;
+    }
+
     try {
-      context.read<MessagesProvider>().sendMessage(
+      provider.sendMessage(
         circleId: widget.circle.id,
         body: text,
       );
       _messageController.clear();
-
-      // Scroll to bottom after sending a message
       Future.delayed(const Duration(milliseconds: 100), _scrollToBottom);
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Failed to send message: ${e.toString().replaceAll('Exception: ', '')}'),
+          content: Text(
+            'Failed to send message: ${e.toString().replaceAll('Exception: ', '')}',
+          ),
           backgroundColor: Colors.red,
         ),
       );
     }
+  }
+
+  void _showMessageActions(Message message) {
+    showModalBottomSheet(
+      context: context,
+      builder: (_) {
+        return SafeArea(
+          child: Wrap(
+            children: [
+              ListTile(
+                leading: const Icon(Icons.edit_outlined),
+                title: const Text('Edit message'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _showEditDialog(message);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.delete_outline),
+                title: const Text('Delete message'),
+                onTap: () async {
+                  Navigator.pop(context);
+                  try {
+                    await context.read<MessagesProvider>().deleteMessage(
+                          circleId: widget.circle.id,
+                          messageId: message.id,
+                        );
+                  } catch (e) {
+                    if (!mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          'Failed to delete message: ${e.toString().replaceAll('Exception: ', '')}',
+                        ),
+                        backgroundColor: Colors.red,
+                      ),
+                    );
+                  }
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  void _showEditDialog(Message message) {
+    final controller = TextEditingController(text: message.body ?? '');
+
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Edit message'),
+        content: TextField(
+          controller: controller,
+          maxLines: null,
+          decoration: const InputDecoration(
+            hintText: 'Update your message',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              final updatedText = controller.text.trim();
+              if (updatedText.isEmpty) return;
+
+              try {
+                await context.read<MessagesProvider>().editMessage(
+                      circleId: widget.circle.id,
+                      messageId: message.id,
+                      body: updatedText,
+                    );
+
+                if (!mounted) return;
+                Navigator.pop(context);
+              } catch (e) {
+                if (!mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      'Failed to edit message: ${e.toString().replaceAll('Exception: ', '')}',
+                    ),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+              }
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -81,14 +188,13 @@ class _ChatScreenState extends State<ChatScreen> {
     final authProvider = context.watch<AuthProvider>();
     final currentUserId = authProvider.user?.id;
 
-    // Scroll to bottom when new messages arrive
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (messagesProvider.messages.isNotEmpty) {
         _scrollToBottom();
       }
     });
 
-        return Scaffold(
+    return Scaffold(
       appBar: AppBar(
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -98,7 +204,8 @@ class _ChatScreenState extends State<ChatScreen> {
               messagesProvider.isConnected ? 'Connected' : 'Connecting...',
               style: TextStyle(
                 fontSize: 12,
-                color: messagesProvider.isConnected ? Colors.green : Colors.grey,
+                color:
+                    messagesProvider.isConnected ? Colors.green : Colors.grey,
               ),
             ),
           ],
@@ -107,7 +214,6 @@ class _ChatScreenState extends State<ChatScreen> {
           IconButton(
             icon: const Icon(Icons.info_outline),
             onPressed: () {
-              // Show circle info
               showDialog(
                 context: context,
                 builder: (context) => AlertDialog(
@@ -119,8 +225,10 @@ class _ChatScreenState extends State<ChatScreen> {
                       if (widget.circle.description != null)
                         Text(widget.circle.description!),
                       const SizedBox(height: 16),
-                      Text('Members: ${widget.circle.messageCount?.members ?? 0}'),
-                      Text('Messages: ${widget.circle.messageCount?.messages ?? 0}'),
+                      Text(
+                          'Members: ${widget.circle.messageCount?.members ?? 0}'),
+                      Text(
+                          'Messages: ${widget.circle.messageCount?.messages ?? 0}'),
                       if (widget.circle.inviteCode != null) ...[
                         const SizedBox(height: 16),
                         const Text('Invite Code:'),
@@ -145,7 +253,6 @@ class _ChatScreenState extends State<ChatScreen> {
       ),
       body: Column(
         children: [
-          // Messages list
           Expanded(
             child: messagesProvider.isLoading
                 ? const Center(child: CircularProgressIndicator())
@@ -153,7 +260,8 @@ class _ChatScreenState extends State<ChatScreen> {
                     ? Center(child: Text('Error: ${messagesProvider.error}'))
                     : messagesProvider.messages.isEmpty
                         ? const Center(
-                            child: Text('No messages yet. Start the conversation!'),
+                            child:
+                                Text('No messages yet. Start the conversation!'),
                           )
                         : ListView.builder(
                             controller: _scrollController,
@@ -162,9 +270,21 @@ class _ChatScreenState extends State<ChatScreen> {
                             itemBuilder: (context, index) {
                               final message = messagesProvider.messages[index];
                               final isMe = message.senderId == currentUserId;
+                              final isDeleted = message.deletedAt != null;
+                              final isEdited =
+                                  message.editedAt != null && !isDeleted;
+
                               final showSender = index == 0 ||
                                   messagesProvider.messages[index - 1].senderId !=
                                       message.senderId;
+
+                              final senderName = (message.sender?.displayName !=
+                                          null &&
+                                      message.sender!.displayName!
+                                          .trim()
+                                          .isNotEmpty)
+                                  ? message.sender!.displayName!
+                                  : (message.sender?.username ?? 'Unknown');
 
                               return Align(
                                 alignment: isMe
@@ -188,7 +308,7 @@ class _ChatScreenState extends State<ChatScreen> {
                                             bottom: 4,
                                           ),
                                           child: Text(
-                                            message.sender?.displayName ?? 'Unknown',
+                                            senderName,
                                             style: TextStyle(
                                               fontSize: 12,
                                               color: Colors.grey[600],
@@ -196,41 +316,65 @@ class _ChatScreenState extends State<ChatScreen> {
                                             ),
                                           ),
                                         ),
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 16,
-                                          vertical: 10,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: isMe
-                                              ? Colors.blue
-                                              : Colors.grey[300],
-                                          borderRadius: BorderRadius.circular(20),
-                                        ),
-                                        child: Column(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.start,
-                                          children: [
-                                            if (message.body != null)
-                                              Text(
-                                                message.body!,
-                                                style: TextStyle(
-                                                  color: isMe
-                                                      ? Colors.white
-                                                      : Colors.black,
-                                                ),
-                                              ),
-                                            if (message.mediaUrl != null)
-                                              Padding(
-                                                padding: const EdgeInsets.only(
-                                                  top: 8,
-                                                ),
-                                                child: Image.network(
-                                                  message.mediaUrl!,
-                                                  fit: BoxFit.cover,
-                                                ),
-                                              ),
-                                          ],
+                                      GestureDetector(
+                                        onLongPress:
+                                            isMe && !isDeleted
+                                                ? () =>
+                                                    _showMessageActions(message)
+                                                : null,
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 16,
+                                            vertical: 10,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: isDeleted
+                                                ? (isMe
+                                                    ? Colors.blue.shade300
+                                                    : Colors.grey.shade200)
+                                                : (isMe
+                                                    ? Colors.blue
+                                                    : Colors.grey[300]),
+                                            borderRadius:
+                                                BorderRadius.circular(20),
+                                          ),
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              if (isDeleted)
+                                                Text(
+                                                  'Message deleted',
+                                                  style: TextStyle(
+                                                    fontStyle: FontStyle.italic,
+                                                    color: isMe
+                                                        ? Colors.white70
+                                                        : Colors.black54,
+                                                  ),
+                                                )
+                                              else ...[
+                                                if (message.body != null)
+                                                  Text(
+                                                    message.body!,
+                                                    style: TextStyle(
+                                                      color: isMe
+                                                          ? Colors.white
+                                                          : Colors.black,
+                                                    ),
+                                                  ),
+                                                if (message.mediaUrl != null)
+                                                  Padding(
+                                                    padding:
+                                                        const EdgeInsets.only(
+                                                            top: 8),
+                                                    child: Image.network(
+                                                      message.mediaUrl!,
+                                                      fit: BoxFit.cover,
+                                                    ),
+                                                  ),
+                                              ],
+                                            ],
+                                          ),
                                         ),
                                       ),
                                       Padding(
@@ -240,8 +384,8 @@ class _ChatScreenState extends State<ChatScreen> {
                                           top: 2,
                                         ),
                                         child: Text(
-                                          DateFormat('HH:mm')
-                                              .format(message.createdAt.toLocal()),
+                                          '${DateFormat('HH:mm').format(message.createdAt.toLocal())}'
+                                          '${isEdited ? ' • edited' : ''}',
                                           style: TextStyle(
                                             fontSize: 10,
                                             color: Colors.grey[600],
@@ -255,8 +399,6 @@ class _ChatScreenState extends State<ChatScreen> {
                             },
                           ),
           ),
-
-          // Message input
           Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
@@ -297,9 +439,8 @@ class _ChatScreenState extends State<ChatScreen> {
                   backgroundColor: Colors.blue,
                   child: IconButton(
                     icon: const Icon(Icons.send, color: Colors.white),
-                    onPressed: messagesProvider.isJoinedRoom
-                        ? _sendMessage
-                        : null,
+                    onPressed:
+                        messagesProvider.isJoinedRoom ? _sendMessage : null,
                   ),
                 ),
               ],
