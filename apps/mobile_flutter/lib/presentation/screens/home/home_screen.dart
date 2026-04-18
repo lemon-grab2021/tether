@@ -245,7 +245,9 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             const SizedBox(height: 12),
 
-            if (directConversationsProvider.isLoading)
+           if (!directConversationsProvider.hasLoadedOnce ||
+                (directConversationsProvider.isLoading &&
+                    directConversationsProvider.conversations.isEmpty))
               const Padding(
                 padding: EdgeInsets.symmetric(vertical: 24),
                 child: Center(child: CircularProgressIndicator()),

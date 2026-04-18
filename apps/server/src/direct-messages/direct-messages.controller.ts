@@ -94,4 +94,27 @@ export class DirectMessagesController {
 
         return deleted;
     }
+
+    @Patch(':conversationId/read')
+    async markAsRead(
+        @Request() req: any,
+        @Param('conversationId', ParseIntPipe) conversationId: number,
+    ) {
+        return this.directMessagesService.markConversationAsRead(
+            conversationId,
+            req.user.id,
+        );
+    }
+
+    @Get(':conversationId')
+    async getConversationById(
+        @Request() req: any,
+        @Param('conversationId', ParseIntPipe) conversationId: number,
+    ) {
+        return this.directMessagesService.getConversationById(
+            conversationId,
+            req.user.id,
+        );
+    }
+
 }

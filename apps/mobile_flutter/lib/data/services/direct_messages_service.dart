@@ -122,4 +122,44 @@ class DirectMessagesService {
       Map<String, dynamic>.from(jsonDecode(response.body)),
     );
   }
+
+  Future<void> markConversationAsRead({
+    required String token,
+    required int conversationId,
+  }) async {
+    final response = await http.patch(
+      Uri.parse(
+        '${ApiConstants.baseUrl}/direct-conversations/$conversationId/read',
+      ),
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+      },
+    );
+
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception('Failed to mark conversation as read');
+    }
+  }
+
+  Future<DirectConversation> getConversationById({
+  required String token,
+  required int conversationId,
+  required int currentUserId,
+}) async {
+  final response = await http.get(
+    Uri.parse('${ApiConstants.baseUrl}/direct-conversations/$conversationId'),
+    headers: {
+      'Authorization': 'Bearer $token',
+    },
+  );
+
+  if (response.statusCode < 200 || response.statusCode >= 300) {
+    throw Exception('Failed to load direct conversation');
+  }
+
+  final data = Map<String, dynamic>.from(jsonDecode(response.body));
+  return DirectConversation.fromJson(data, currentUserId);
+}
+
 }

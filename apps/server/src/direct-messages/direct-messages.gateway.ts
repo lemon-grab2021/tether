@@ -132,4 +132,28 @@ export class DirectMessagesGateway
 
         return { success: true, message };
     }
+
+    @SubscribeMessage('direct:read')
+    async handleDirectRead(
+        @ConnectedSocket() client: AuthenticatedSocket,
+        @MessageBody() data: { conversationId: number },
+    ) {
+        if (!client.user) {
+            return { error: 'Not authenticated' };
+        }
+
+        const updatedConversation = await this.directMessagesService.markConversationAsRead(
+            data.conversationId,
+            client.user.id,
+        );
+
+        this.server.to(`direct:${data.conversationId}`).emit('direct:conversation:read', {
+            conversationId: data.conversationId,
+            readerId: client.user.id,
+            userOneLastReadAt: updatedConversation.userOneLastReadAt,
+            userTwoLastReadAt: updatedConversation.userTwoLastReadAt,
+        });
+
+        return { success: true };
+    }
 }

@@ -9,10 +9,12 @@ class DirectConversationsProvider extends ChangeNotifier {
 
   List<DirectConversation> _conversations = [];
   bool _isLoading = false;
+  bool _hasLoadedOnce = false;
   String? _error;
 
   List<DirectConversation> get conversations => _conversations;
   bool get isLoading => _isLoading;
+  bool get hasLoadedOnce => _hasLoadedOnce;
   String? get error => _error;
 
   Future<void> loadConversations({required int currentUserId}) async {
@@ -30,8 +32,10 @@ class DirectConversationsProvider extends ChangeNotifier {
         token: token,
         currentUserId: currentUserId,
       );
+      _hasLoadedOnce = true;
     } catch (e) {
       _error = e.toString();
+      _hasLoadedOnce = true;
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -52,6 +56,7 @@ class DirectConversationsProvider extends ChangeNotifier {
 
       _conversations = newConversations;
       _error = null;
+      _hasLoadedOnce = true;
       notifyListeners();
     } catch (_) {
       // Keep current conversations visible during background refresh
@@ -62,6 +67,7 @@ class DirectConversationsProvider extends ChangeNotifier {
     _conversations = [];
     _error = null;
     _isLoading = false;
+    _hasLoadedOnce = false;
     notifyListeners();
   }
 }

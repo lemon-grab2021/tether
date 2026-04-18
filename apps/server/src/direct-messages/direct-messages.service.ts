@@ -55,7 +55,7 @@ export class DirectMessagesService {
             include: {
                 userOne: { select: this.userSelect },
                 userTwo: { select: this.userSelect },
-                message: {
+                messages: {
                     where: { deletedAt: null },
                     orderBy: { createdAt: 'desc' },
                     take: 1,
@@ -77,7 +77,7 @@ export class DirectMessagesService {
             include: {
                 userOne: { select: this.userSelect },
                 userTwo: { select: this.userSelect },
-                message: {
+                messages: {
                     where: { deletedAt: null },
                     orderBy: { createdAt: 'desc' },
                     take: 1,
@@ -237,6 +237,102 @@ export class DirectMessagesService {
                 sender: {
                     select: this.userSelect,
                 },
+            },
+        });
+    }
+
+    async getConversationById(conversationId: number, userId: number) {
+        const conversation = await this.prisma.directConversation.findUnique({
+            where: { id: conversationId },
+            include: {
+                userOne: {
+                    select: {
+                        id: true,
+                        username: true,
+                        displayName: true,
+                        avatarUrl: true,
+                    },
+                },
+                userTwo: {
+                    select: {
+                        id: true,
+                        username: true,
+                        displayName: true,
+                        avatarUrl: true,
+                    },
+                },
+                messages: {
+                    where: {
+                        deletedAt: null,
+                    },
+                    orderBy: {
+                        createdAt: 'desc',
+                    },
+                    take: 1,
+                    include: {
+                        sender: {
+                            select: {
+                                id: true,
+                                username: true,
+                                displayName: true,
+                                avatarUrl: true,
+                            },
+                        },
+                    },
+                },
+            },
+        });
+
+        if (!conversation) {
+            throw new NotFoundException('Conversation not found');
+        }
+
+        if (
+            conversation.userOneId !== userId &&
+            conversation.userTwoId !== userId
+        ) {
+            throw new ForbiddenException(
+                'You are not a participant in this conversation',
+            );
+        }
+
+        return conversation;
+    }
+
+    async markConversationAsRead(conversationId: number, userId: number) {
+        const conversation = await this.prisma.directConversation.findUnique({
+            where: { id: conversationId },
+            select: {
+                id: true,
+                userOneId: true,
+                userTwoId: true,
+                userOneLastReadAt: true,
+                userTwoLastReadAt: true,
+            },
+        });
+
+        if (!conversation) {
+            throw new NotFoundException('Conversation not found');
+        }
+
+        if (conversation.userOneId !== userId && conversation.userTwoId !== userId) {
+            throw new ForbiddenException('You are not a participant in this conversation');
+        }
+
+        const now = new Date();
+
+        return this.prisma.directConversation.update({
+            where: { id: conversationId },
+            data:
+                conversation.userOneId === userId
+                    ? { userOneLastReadAt: now }
+                    : { userTwoLastReadAt: now },
+            select: {
+                id: true,
+                userOneId: true,
+                userTwoId: true,
+                userOneLastReadAt: true,
+                userTwoLastReadAt: true,
             },
         });
     }
