@@ -23,6 +23,7 @@ class LinksProvider extends ChangeNotifier {
   List<LinkModel> get links => _links;
   bool get isLoading => _isLoading;
   String? get error => _error;
+  String _lastSearchQuery = '';
 
   Future<String> _getToken() async {
     final token = await _authService.getAccessToken();
@@ -32,6 +33,14 @@ class LinksProvider extends ChangeNotifier {
 
   Future<void> searchUsers(String query) async {
     if (query.trim().isEmpty) {
+      _searchResults = [];
+      notifyListeners();
+      return;
+    }
+
+    _lastSearchQuery = query.trim();
+
+    if (_lastSearchQuery.isEmpty) {
       _searchResults = [];
       notifyListeners();
       return;
@@ -62,10 +71,8 @@ class LinksProvider extends ChangeNotifier {
 
     try {
       final token = await _getToken();
-      _incomingRequests =
-          await _linksService.getIncomingRequests(token: token);
-      _outgoingRequests =
-          await _linksService.getOutgoingRequests(token: token);
+      _incomingRequests = await _linksService.getIncomingRequests(token: token);
+      _outgoingRequests = await _linksService.getOutgoingRequests(token: token);
     } catch (e) {
       _error = e.toString();
     } finally {
@@ -93,6 +100,8 @@ class LinksProvider extends ChangeNotifier {
   Future<void> sendLinkRequest(int receiverId) async {
     final token = await _getToken();
     await _linksService.sendRequest(token: token, receiverId: receiverId);
+    await loadRequests();
+    await refreshSearchResultsIfNeeded();
   }
 
   Future<void> respondToRequest(int requestId, String action) async {
@@ -104,14 +113,30 @@ class LinksProvider extends ChangeNotifier {
     );
     await loadRequests();
     await loadLinks();
+    await refreshSearchResultsIfNeeded();
   }
 
   Future<void> removeLink(int otherUserId) async {
     final token = await _getToken();
-    await _linksService.removeLink(
-      token: token,
-      otherUserId: otherUserId,
-    );
+    await _linksService.removeLink(token: token, otherUserId: otherUserId);
     await loadLinks();
+    await refreshSearchResultsIfNeeded();
+  }
+
+  Future<void> refreshSearchResultsIfNeeded() async {
+    if (_lastSearchQuery.isEmpty) return;
+
+    try {
+      final token = await _getToken();
+      _searchResults = await _linksService.searchUsers(
+        token: token,
+        query: _lastSearchQuery,
+      );
+      _error = null;
+      notifyListeners();
+    } catch (e) {
+      _error = e.toString();
+      notifyListeners();
+    }
   }
 }

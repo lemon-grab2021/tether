@@ -17,6 +17,7 @@ class DirectMessagesProvider extends ChangeNotifier {
   bool _isLoading = false;
   bool _isConnected = false;
   bool _isJoinedRoom = false;
+  bool _isOtherUserTyping = false;
   String? _error;
 
   List<DirectMessage> get messages => _messages;
@@ -24,6 +25,7 @@ class DirectMessagesProvider extends ChangeNotifier {
   bool get isLoading => _isLoading;
   bool get isConnected => _isConnected;
   bool get isJoinedRoom => _isJoinedRoom;
+  bool get isOtherUserTyping => _isOtherUserTyping;
   String? get error => _error;
 
   Future<void> loadMessages(int conversationId, {int? cursor}) async {
@@ -167,6 +169,14 @@ class DirectMessagesProvider extends ChangeNotifier {
       _socket!.emit('direct:join', {'conversationId': conversationId});
     });
 
+    _socket!.on('direct:typing:update', (data) {
+      final map = Map<String, dynamic>.from(data as Map);
+      final isTyping = map['isTyping'] == true;
+
+      _isOtherUserTyping = isTyping;
+      notifyListeners();
+    });
+
     _socket!.on('direct:joined', (_) async {
       _isJoinedRoom = true;
       notifyListeners();
@@ -233,6 +243,16 @@ class DirectMessagesProvider extends ChangeNotifier {
     });
   }
 
+  void startTyping(int conversationId) {
+    if (_socket == null || !_isJoinedRoom) return;
+    _socket!.emit('direct:typing:start', {'conversationId': conversationId});
+  }
+
+  void stopTyping(int conversationId) {
+    if (_socket == null || !_isJoinedRoom) return;
+    _socket!.emit('direct:typing:stop', {'conversationId': conversationId});
+  }
+
   Future<void> editMessage({
     required int conversationId,
     required int messageId,
@@ -284,6 +304,7 @@ class DirectMessagesProvider extends ChangeNotifier {
 
     _isConnected = false;
     _isJoinedRoom = false;
+    _isOtherUserTyping = false;
     notifyListeners();
   }
 

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'register_screen.dart';
-import '../home/home_screen.dart';
+import '../home/main_shell.dart';
 import '../../../providers/auth_provider.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -37,7 +37,7 @@ class _LoginScreenState extends State<LoginScreen> {
       
       if (mounted) {
         Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (context) => const HomeScreen()),
+          MaterialPageRoute(builder: (context) => const MainShell()),
         );
       }
     } catch (e) {

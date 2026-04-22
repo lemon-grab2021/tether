@@ -142,16 +142,76 @@ export class DirectMessagesGateway
             return { error: 'Not authenticated' };
         }
 
-        const updatedConversation = await this.directMessagesService.markConversationAsRead(
+        const updatedConversation =
+            await this.directMessagesService.markConversationAsRead(
+                data.conversationId,
+                client.user.id,
+            );
+
+        this.server.to(this.roomName(data.conversationId)).emit(
+            'direct:conversation:read',
+            {
+                conversationId: data.conversationId,
+                readerId: client.user.id,
+                userOneLastReadAt: updatedConversation.userOneLastReadAt,
+                userTwoLastReadAt: updatedConversation.userTwoLastReadAt,
+            },
+        );
+
+        return { success: true };
+    }
+
+    @SubscribeMessage('direct:typing:start')
+    async handleDirectTypingStart(
+        @ConnectedSocket() client: AuthenticatedSocket,
+        @MessageBody() data: { conversationId: number },
+    ) {
+        if (!client.user) {
+            return { error: 'Not authenticated' };
+        }
+
+        const allowed = await this.directMessagesService.isParticipant(
             data.conversationId,
             client.user.id,
         );
 
-        this.server.to(`direct:${data.conversationId}`).emit('direct:conversation:read', {
+        if (!allowed) {
+            return { error: 'Not a participant in this conversation' };
+        }
+
+        client.to(this.roomName(data.conversationId)).emit('direct:typing:update', {
             conversationId: data.conversationId,
-            readerId: client.user.id,
-            userOneLastReadAt: updatedConversation.userOneLastReadAt,
-            userTwoLastReadAt: updatedConversation.userTwoLastReadAt,
+            userId: client.user.id,
+            username: client.user.username,
+            isTyping: true,
+        });
+
+        return { success: true };
+    }
+
+    @SubscribeMessage('direct:typing:stop')
+    async handleDirectTypingStop(
+        @ConnectedSocket() client: AuthenticatedSocket,
+        @MessageBody() data: { conversationId: number },
+    ) {
+        if (!client.user) {
+            return { error: 'Not authenticated' };
+        }
+
+        const allowed = await this.directMessagesService.isParticipant(
+            data.conversationId,
+            client.user.id,
+        );
+
+        if (!allowed) {
+            return { error: 'Not a participant in this conversation' };
+        }
+
+        client.to(this.roomName(data.conversationId)).emit('direct:typing:update', {
+            conversationId: data.conversationId,
+            userId: client.user.id,
+            username: client.user.username,
+            isTyping: false,
         });
 
         return { success: true };
