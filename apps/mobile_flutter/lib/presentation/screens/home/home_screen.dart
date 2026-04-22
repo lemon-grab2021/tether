@@ -34,8 +34,8 @@ class _HomeScreenState extends State<HomeScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final authProvider = context.read<AuthProvider>();
       final circlesProvider = context.read<CirclesProvider>();
-      final directConversationsProvider =
-          context.read<DirectConversationsProvider>();
+      final directConversationsProvider = context
+          .read<DirectConversationsProvider>();
 
       circlesProvider.loadCircles();
 
@@ -57,9 +57,7 @@ class _HomeScreenState extends State<HomeScreen> {
         if (currentUserId != null) {
           context
               .read<DirectConversationsProvider>()
-              .refreshConversationsSilently(
-                currentUserId: currentUserId,
-              );
+              .refreshConversationsSilently(currentUserId: currentUserId);
         }
       });
     });
@@ -74,8 +72,8 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _refreshHome() async {
     final authProvider = context.read<AuthProvider>();
     final circlesProvider = context.read<CirclesProvider>();
-    final directConversationsProvider =
-        context.read<DirectConversationsProvider>();
+    final directConversationsProvider = context
+        .read<DirectConversationsProvider>();
 
     await circlesProvider.loadCircles();
 
@@ -140,16 +138,15 @@ class _HomeScreenState extends State<HomeScreen> {
 
       final name =
           (otherUser.displayName != null &&
-                  otherUser.displayName!.trim().isNotEmpty)
-              ? otherUser.displayName!
-              : otherUser.username;
+              otherUser.displayName!.trim().isNotEmpty)
+          ? otherUser.displayName!
+          : otherUser.username;
 
-      final preview =
-          conversation.lastMessage?.body?.trim().isNotEmpty == true
-              ? conversation.lastMessage!.body!
-              : conversation.lastMessage?.mediaUrl != null
-                  ? 'Sent an attachment'
-                  : 'Start your conversation';
+      final preview = conversation.lastMessage?.body?.trim().isNotEmpty == true
+          ? conversation.lastMessage!.body!
+          : conversation.lastMessage?.mediaUrl != null
+          ? 'Sent an attachment'
+          : 'Start your conversation';
 
       final isUnread = currentUserId == null
           ? false
@@ -192,8 +189,8 @@ class _HomeScreenState extends State<HomeScreen> {
     for (final circle in circlesProvider.circles) {
       final preview =
           (circle.description != null && circle.description!.trim().isNotEmpty)
-              ? circle.description!
-              : 'Circle conversation';
+          ? circle.description!
+          : 'Circle conversation';
 
       items.add(
         _InboxItem(
@@ -207,9 +204,7 @@ class _HomeScreenState extends State<HomeScreen> {
           onTap: () {
             Navigator.push(
               context,
-              MaterialPageRoute(
-                builder: (_) => ChatScreen(circle: circle),
-              ),
+              MaterialPageRoute(builder: (_) => ChatScreen(circle: circle)),
             );
           },
         ),
@@ -224,14 +219,14 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     final authProvider = context.watch<AuthProvider>();
     final circlesProvider = context.watch<CirclesProvider>();
-    final directConversationsProvider =
-        context.watch<DirectConversationsProvider>();
+    final directConversationsProvider = context
+        .watch<DirectConversationsProvider>();
 
     final user = authProvider.user;
     final displayName =
         (user?.displayName != null && user!.displayName!.trim().isNotEmpty)
-            ? user.displayName!.trim()
-            : (user?.username ?? 'User');
+        ? user.displayName!.trim()
+        : (user?.username ?? 'User');
 
     final currentUserId = user?.id;
 
@@ -256,20 +251,20 @@ class _HomeScreenState extends State<HomeScreen> {
         title: Row(
           children: [
             Container(
-              width: 28,
-              height: 28,
+              width: 40,
+              height: 40,
               decoration: BoxDecoration(
                 color: Colors.blue.shade50,
                 shape: BoxShape.circle,
               ),
               child: const Padding(
-                padding: EdgeInsets.all(5),
+                padding: EdgeInsets.all(7),
                 child: CustomPaint(
                   painter: _TetherIconPainter(color: Color(0xFF1274E7)),
                 ),
               ),
             ),
-            const SizedBox(width: 10),
+            const SizedBox(width: 15),
             const Text(
               'Tether',
               style: TextStyle(
@@ -297,9 +292,9 @@ class _HomeScreenState extends State<HomeScreen> {
               if (!mounted) return;
               final currentUserId = context.read<AuthProvider>().user?.id;
               if (currentUserId != null) {
-                await context.read<DirectConversationsProvider>().loadConversations(
-                      currentUserId: currentUserId,
-                    );
+                await context
+                    .read<DirectConversationsProvider>()
+                    .loadConversations(currentUserId: currentUserId);
               }
             },
           ),
@@ -309,9 +304,7 @@ class _HomeScreenState extends State<HomeScreen> {
             onPressed: () {
               Navigator.push(
                 context,
-                MaterialPageRoute(
-                  builder: (_) => const ProfileScreen(),
-                ),
+                MaterialPageRoute(builder: (_) => const ProfileScreen()),
               );
             },
           ),
@@ -323,65 +316,76 @@ class _HomeScreenState extends State<HomeScreen> {
         child: ListView(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
           children: [
-            _WelcomeCard(
-              displayName: displayName,
-              unreadCount: totalUnread,
-            ),
+            _WelcomeCard(displayName: displayName, unreadCount: totalUnread),
             const SizedBox(height: 5),
             Row(
               children: [
                 Expanded(
-                  child: _ActionTile(
-                    label: 'Create',
-                    icon: Icons.add,
-                    filled: true,
-                    onTap: () {
-                      showDialog(
-                        context: context,
-                        builder: (_) => const CreateCircleDialog(),
-                      );
-                    },
+                  child: SizedBox(
+                    height: 80,
+                    child: _ActionTile(
+                      label: 'Create',
+                      icon: Icons.add,
+                      filled: true,
+                      onTap: () {
+                        showModalBottomSheet(
+                          context: context,
+                          isScrollControlled: true,
+                          backgroundColor: Colors.transparent,
+                          builder: (_) => const CreateCircleDialog(),
+                        );
+                      },
+                    ),
                   ),
                 ),
-                const SizedBox(width: 5),
+                const SizedBox(width: 10),
                 Expanded(
-                  child: _ActionTile(
-                    label: 'Join',
-                    icon: Icons.group_add_outlined,
-                    onTap: () {
-                      showDialog(
-                        context: context,
-                        builder: (_) => const JoinCircleDialog(),
-                      );
-                    },
+                  child: SizedBox(
+                    height: 80,
+                    child: _ActionTile(
+                      label: 'Join',
+                      icon: Icons.group_add_outlined,
+                      onTap: () {
+                        showModalBottomSheet(
+                          context: context,
+                          isScrollControlled: true,
+                          backgroundColor: Colors.transparent,
+                          builder: (_) => const JoinCircleDialog(),
+                        );
+                      },
+                    ),
                   ),
                 ),
-                const SizedBox(width: 5),
+                const SizedBox(width: 10),
                 Expanded(
-                  child: _ActionTile(
-                    label: 'Links',
-                    icon: Icons.link,
-                    onTap: () async {
-                      await Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => ChangeNotifierProvider(
-                            create: (_) => LinksProvider(),
-                            child: const LinksScreen(),
+                  child: SizedBox(
+                    height: 80,
+                    child: _ActionTile(
+                      label: 'Links',
+                      icon: Icons.link,
+                      onTap: () async {
+                        await Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => ChangeNotifierProvider(
+                              create: (_) => LinksProvider(),
+                              child: const LinksScreen(),
+                            ),
                           ),
-                        ),
-                      );
+                        );
 
-                      if (!mounted) return;
-                      final currentUserId = context.read<AuthProvider>().user?.id;
-                      if (currentUserId != null) {
-                        await context
-                            .read<DirectConversationsProvider>()
-                            .loadConversations(
-                              currentUserId: currentUserId,
-                            );
-                      }
-                    },
+                        if (!mounted) return;
+                        final currentUserId = context
+                            .read<AuthProvider>()
+                            .user
+                            ?.id;
+                        if (currentUserId != null) {
+                          await context
+                              .read<DirectConversationsProvider>()
+                              .loadConversations(currentUserId: currentUserId);
+                        }
+                      },
+                    ),
                   ),
                 ),
               ],
@@ -424,7 +428,8 @@ class _HomeScreenState extends State<HomeScreen> {
                     circlesProvider.error != null))
               _MessageEmptyState(
                 title: 'Could not load messages',
-                subtitle: directConversationsProvider.error ??
+                subtitle:
+                    directConversationsProvider.error ??
                     circlesProvider.error ??
                     'Something went wrong.',
               )
@@ -482,31 +487,31 @@ class _WelcomeCard extends StatelessWidget {
   final String displayName;
   final int unreadCount;
 
-  const _WelcomeCard({
-    required this.displayName,
-    required this.unreadCount,
-  });
+  const _WelcomeCard({required this.displayName, required this.unreadCount});
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.fromLTRB(18, 16, 18, 16),
+      constraints: const BoxConstraints(minHeight: 70),
+      padding: const EdgeInsets.fromLTRB(12, 9, 12, 9),
       decoration: BoxDecoration(
         color: const Color(0xFFEAF4FF),
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: BorderRadius.circular(28),
       ),
       child: Stack(
         children: [
           Positioned(
-            right: 0,
-            top: 0,
+            right: 6,
+            top: 4,
             child: Opacity(
-              opacity: 0.22,
+              opacity: 0.20,
               child: SizedBox(
                 width: 54,
                 height: 54,
                 child: CustomPaint(
-                  painter: const _TetherIconPainter(color: Colors.blue),
+                  painter: const _TetherIconPainter(
+                    color: Color.fromARGB(255, 19, 142, 243),
+                  ),
                 ),
               ),
             ),
@@ -517,7 +522,7 @@ class _WelcomeCard extends StatelessWidget {
               Row(
                 children: [
                   const Spacer(),
-                  if (unreadCount > 0 )
+                  if (unreadCount > 0)
                     Container(
                       padding: const EdgeInsets.symmetric(
                         horizontal: 10,
@@ -531,39 +536,45 @@ class _WelcomeCard extends StatelessWidget {
                         '$unreadCount unread',
                         style: const TextStyle(
                           color: Color(0xFF475569),
-                          fontSize: 13,
+                          fontSize: 11,
                           fontWeight: FontWeight.w700,
                         ),
                       ),
                     ),
                 ],
               ),
-              const Text(
-                'Hello,',
-                style: TextStyle(
-                  fontSize: 15,
-                  color: Color(0xFF64748B),
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                displayName,
-                style: const TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.w800,
-                  color: Color(0xFF0F172A),
-                ),
-              ),
-              const SizedBox(height: 10),
-              const Text(
-                'Stay connected with the people who matter most to you.',
-                style: TextStyle(
-                  fontSize: 15,
-                  height: 1.35,
-                  color: Color(0xFF475569),
-                  fontWeight: FontWeight.w500,
-                ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Text(
+                    'Hello,',
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: Color(0xFF64748B),
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    displayName,
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w800,
+                      color: Color(0xFF0F172A),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  const Text(
+                    'Stay connected with the people who matter most to you.',
+                    style: TextStyle(
+                      fontSize: 14,
+                      height: 1.35,
+                      color: Color(0xFF475569),
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
@@ -600,10 +611,10 @@ class _ActionTile extends StatelessWidget {
         borderRadius: BorderRadius.circular(22),
         onTap: onTap,
         child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 18),
+          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
           alignment: Alignment.center,
           child: Column(
-            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Icon(icon, size: 22, color: foreground),
               const SizedBox(height: 8),
@@ -655,10 +666,7 @@ class _MessageCard extends StatelessWidget {
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(22),
-            border: Border.all(
-              color: const Color(0xFFE2E8F0),
-              width: 1,
-            ),
+            border: Border.all(color: const Color(0xFFE2E8F0), width: 1),
           ),
           child: Row(
             children: [
@@ -688,8 +696,9 @@ class _MessageCard extends StatelessWidget {
                         color: subtitleBold
                             ? const Color(0xFF0F172A)
                             : const Color(0xFF475569),
-                        fontWeight:
-                            subtitleBold ? FontWeight.w700 : FontWeight.w500,
+                        fontWeight: subtitleBold
+                            ? FontWeight.w700
+                            : FontWeight.w500,
                       ),
                     ),
                   ],
@@ -744,11 +753,7 @@ class _CircleClusterAvatar extends StatelessWidget {
   const _CircleClusterAvatar({required this.seed});
 
   Color _colorForIndex(int index) {
-    const colors = [
-      Color(0xFF11C5B7),
-      Color(0xFF4F7DF3),
-      Color(0xFF6E63F6),
-    ];
+    const colors = [Color(0xFF11C5B7), Color(0xFF4F7DF3), Color(0xFF6E63F6)];
     return colors[index % colors.length];
   }
 
@@ -801,10 +806,7 @@ class _MiniCircle extends StatelessWidget {
   final String label;
   final Color color;
 
-  const _MiniCircle({
-    required this.label,
-    required this.color,
-  });
+  const _MiniCircle({required this.label, required this.color});
 
   @override
   Widget build(BuildContext context) {
@@ -833,10 +835,7 @@ class _MessageEmptyState extends StatelessWidget {
   final String title;
   final String subtitle;
 
-  const _MessageEmptyState({
-    required this.title,
-    required this.subtitle,
-  });
+  const _MessageEmptyState({required this.title, required this.subtitle});
 
   @override
   Widget build(BuildContext context) {
