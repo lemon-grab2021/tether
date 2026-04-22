@@ -17,7 +17,11 @@ class _AppShellState extends State<AppShell> {
   late int _currentIndex;
 
   late final List<Widget> _pages = [
-    const HomeScreen(),
+    HomeScreen(
+      onOpenSearchTab: () => _onTap(1),
+      onOpenLinksTab: () => _onTap(2),
+      onOpenProfileTab: () => _onTap(3),
+    ),
     const SearchScreen(),
     const LinksScreen(),
     const ProfileScreen(),
@@ -39,10 +43,7 @@ class _AppShellState extends State<AppShell> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: IndexedStack(
-        index: _currentIndex,
-        children: _pages,
-      ),
+      body: IndexedStack(index: _currentIndex, children: _pages),
       bottomNavigationBar: SafeArea(
         top: false,
         child: Container(
@@ -128,11 +129,7 @@ class _NavItem extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(
-                icon,
-                size: 22,
-                color: active ? activeColor : inactiveColor,
-              ),
+              Icon(icon, size: 22, color: active ? activeColor : inactiveColor),
               const SizedBox(height: 4),
               Text(
                 label,

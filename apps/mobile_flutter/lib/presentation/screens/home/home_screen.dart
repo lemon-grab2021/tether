@@ -6,19 +6,25 @@ import '../../../providers/auth_provider.dart';
 import '../../../providers/circles_provider.dart';
 import '../../../providers/direct_conversations_provider.dart';
 import '../../../providers/direct_messages_provider.dart';
-import '../../../providers/links_provider.dart';
 
 import '../chat/chat_screen.dart';
 import '../chat/direct_chat_screen.dart';
-import '../profile/profile_screen.dart';
-import 'links_screen.dart';
 
 import '../../widgets/app_avatar.dart';
 import '../../widgets/create_circle_dialog.dart';
 import '../../widgets/join_circle_dialog.dart';
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key});
+  final VoidCallback? onOpenLinksTab;
+  final VoidCallback? onOpenProfileTab;
+  final VoidCallback? onOpenSearchTab;
+
+  const HomeScreen({
+    super.key,
+    this.onOpenLinksTab,
+    this.onOpenProfileTab,
+    this.onOpenSearchTab,
+  });
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -34,8 +40,8 @@ class _HomeScreenState extends State<HomeScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final authProvider = context.read<AuthProvider>();
       final circlesProvider = context.read<CirclesProvider>();
-      final directConversationsProvider = context
-          .read<DirectConversationsProvider>();
+      final directConversationsProvider =
+          context.read<DirectConversationsProvider>();
 
       circlesProvider.loadCircles();
 
@@ -69,11 +75,23 @@ class _HomeScreenState extends State<HomeScreen> {
     super.dispose();
   }
 
+  void _openLinksTab() {
+    widget.onOpenLinksTab?.call();
+  }
+
+  void _openProfileTab() {
+    widget.onOpenProfileTab?.call();
+  }
+
+  void _openSearchTab() {
+    widget.onOpenSearchTab?.call();
+  }
+
   Future<void> _refreshHome() async {
     final authProvider = context.read<AuthProvider>();
     final circlesProvider = context.read<CirclesProvider>();
-    final directConversationsProvider = context
-        .read<DirectConversationsProvider>();
+    final directConversationsProvider =
+        context.read<DirectConversationsProvider>();
 
     await circlesProvider.loadCircles();
 
@@ -138,15 +156,15 @@ class _HomeScreenState extends State<HomeScreen> {
 
       final name =
           (otherUser.displayName != null &&
-              otherUser.displayName!.trim().isNotEmpty)
-          ? otherUser.displayName!
-          : otherUser.username;
+                  otherUser.displayName!.trim().isNotEmpty)
+              ? otherUser.displayName!
+              : otherUser.username;
 
       final preview = conversation.lastMessage?.body?.trim().isNotEmpty == true
           ? conversation.lastMessage!.body!
           : conversation.lastMessage?.mediaUrl != null
-          ? 'Sent an attachment'
-          : 'Start your conversation';
+              ? 'Sent an attachment'
+              : 'Start your conversation';
 
       final isUnread = currentUserId == null
           ? false
@@ -189,8 +207,8 @@ class _HomeScreenState extends State<HomeScreen> {
     for (final circle in circlesProvider.circles) {
       final preview =
           (circle.description != null && circle.description!.trim().isNotEmpty)
-          ? circle.description!
-          : 'Circle conversation';
+              ? circle.description!
+              : 'Circle conversation';
 
       items.add(
         _InboxItem(
@@ -219,14 +237,14 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     final authProvider = context.watch<AuthProvider>();
     final circlesProvider = context.watch<CirclesProvider>();
-    final directConversationsProvider = context
-        .watch<DirectConversationsProvider>();
+    final directConversationsProvider =
+        context.watch<DirectConversationsProvider>();
 
     final user = authProvider.user;
     final displayName =
         (user?.displayName != null && user!.displayName!.trim().isNotEmpty)
-        ? user.displayName!.trim()
-        : (user?.username ?? 'User');
+            ? user.displayName!.trim()
+            : (user?.username ?? 'User');
 
     final currentUserId = user?.id;
 
@@ -278,35 +296,12 @@ class _HomeScreenState extends State<HomeScreen> {
           IconButton(
             icon: const Icon(Icons.people_alt_outlined),
             color: const Color(0xFF475569),
-            onPressed: () async {
-              await Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => ChangeNotifierProvider(
-                    create: (_) => LinksProvider(),
-                    child: const LinksScreen(),
-                  ),
-                ),
-              );
-
-              if (!mounted) return;
-              final currentUserId = context.read<AuthProvider>().user?.id;
-              if (currentUserId != null) {
-                await context
-                    .read<DirectConversationsProvider>()
-                    .loadConversations(currentUserId: currentUserId);
-              }
-            },
+            onPressed: _openLinksTab,
           ),
           IconButton(
             icon: const Icon(Icons.account_circle_outlined),
             color: const Color(0xFF475569),
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const ProfileScreen()),
-              );
-            },
+            onPressed: _openProfileTab,
           ),
           const SizedBox(width: 8),
         ],
@@ -363,28 +358,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     child: _ActionTile(
                       label: 'Links',
                       icon: Icons.link,
-                      onTap: () async {
-                        await Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => ChangeNotifierProvider(
-                              create: (_) => LinksProvider(),
-                              child: const LinksScreen(),
-                            ),
-                          ),
-                        );
-
-                        if (!mounted) return;
-                        final currentUserId = context
-                            .read<AuthProvider>()
-                            .user
-                            ?.id;
-                        if (currentUserId != null) {
-                          await context
-                              .read<DirectConversationsProvider>()
-                              .loadConversations(currentUserId: currentUserId);
-                        }
-                      },
+                      onTap: _openLinksTab,
                     ),
                   ),
                 ),
@@ -414,7 +388,6 @@ class _HomeScreenState extends State<HomeScreen> {
               ],
             ),
             const SizedBox(height: 14),
-
             if ((!directConversationsProvider.hasLoadedOnce &&
                     directConversationsProvider.conversations.isEmpty) &&
                 circlesProvider.isLoading &&
