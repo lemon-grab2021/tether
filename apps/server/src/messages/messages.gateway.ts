@@ -23,6 +23,8 @@ interface AuthenticatedSocket extends Socket {
     };
 }
 
+
+
 @WebSocketGateway({
     cors: {
         origin: true,
@@ -34,6 +36,8 @@ export class MessagesGateway implements OnGatewayConnection, OnGatewayDisconnect
     server!: Server;
 
     private userSockets: Map<number, Set<string>> = new Map(); // userId -> Set of socket IDs
+    private circlePresence = new Map<number, Map<number, Set<string>>>();
+    private socketCircles = new Map<string, Set<number>>();
 
     constructor(
         private messagesService: MessagesService,
@@ -41,6 +45,63 @@ export class MessagesGateway implements OnGatewayConnection, OnGatewayDisconnect
         private jwtService: JwtService,
         private config: ConfigService,
     ) { }
+
+    private trackSocketCircle(socketId: string, circleId: number) {
+        const joined = this.socketCircles.get(socketId) ?? new Set<number>();
+        joined.add(circleId);
+        this.socketCircles.set(socketId, joined);
+    }
+
+    private untrackSocketCircle(socketId: string, circleId: number) {
+        const joined = this.socketCircles.get(socketId);
+        if (!joined) return;
+
+        joined.delete(circleId);
+        if (joined.size === 0) {
+            this.socketCircles.delete(socketId);
+        }
+    }
+
+    private addPresence(circleId: number, userId: number, socketId: string) {
+        const roomMap = this.circlePresence.get(circleId) ?? new Map<number, Set<string>>();
+        const sockets = roomMap.get(userId) ?? new Set<string>();
+
+        sockets.add(socketId);
+        roomMap.set(userId, sockets);
+        this.circlePresence.set(circleId, roomMap);
+    }
+
+    private removePresence(circleId: number, userId: number, socketId: string) {
+        const roomMap = this.circlePresence.get(circleId);
+        if (!roomMap) return;
+
+        const sockets = roomMap.get(userId);
+        if (!sockets) return;
+
+        sockets.delete(socketId);
+
+        if (sockets.size === 0) {
+            roomMap.delete(userId);
+        } else {
+            roomMap.set(userId, sockets);
+        }
+
+        if (roomMap.size === 0) {
+            this.circlePresence.delete(circleId);
+        } else {
+            this.circlePresence.set(circleId, roomMap);
+        }
+    }
+
+    private emitCirclePresence(circleId: number) {
+        const roomMap = this.circlePresence.get(circleId) ?? new Map<number, Set<string>>();
+        const onlineUserIds = Array.from(roomMap.keys());
+
+        this.server.to(`circle:${circleId}`).emit('circle:presence', {
+            circleId,
+            onlineUserIds,
+        });
+    }
 
     // Handle new WebSocket connections
     async handleConnection(client: AuthenticatedSocket) {
@@ -83,16 +144,20 @@ export class MessagesGateway implements OnGatewayConnection, OnGatewayDisconnect
 
     // Handle disconnections
     handleDisconnect(client: AuthenticatedSocket) {
-        if (client.user) {
-            const userSocketSet = this.userSockets.get(client.user.id);
-            if (userSocketSet) {
-                userSocketSet.delete(client.id);
-                if (userSocketSet.size === 0) {
-                    this.userSockets.delete(client.user.id);
-                }
+        const joinedCircles = this.socketCircles.get(client.id);
+
+        if (joinedCircles && client.user) {
+            for (const circleId of joinedCircles) {
+                this.removePresence(circleId, client.user.id, client.id);
+                this.emitCirclePresence(circleId);
             }
-            console.log(`Client disconnected: ${client.id} (User: ${client.user.username})`);
         }
+
+        this.socketCircles.delete(client.id);
+
+        console.log(
+            `Circle socket disconnected: ${client.id} (${client.user?.username ?? 'unknown'})`,
+        );
     }
 
     // Join a circle room
@@ -104,7 +169,6 @@ export class MessagesGateway implements OnGatewayConnection, OnGatewayDisconnect
         console.log(`[JOIN] User ${client.user?.username} attempting to join circle ${data.circleId}`);
 
         if (!client.user) {
-            console.log('[JOIN] ERROR: No user on socket');
             return { error: 'Not authenticated' };
         }
 
@@ -121,13 +185,14 @@ export class MessagesGateway implements OnGatewayConnection, OnGatewayDisconnect
             // Join the Socket.io room
             const roomName = `circle:${data.circleId}`;
             await client.join(roomName); // Make sure to await the join operation
-            console.log(`[JOIN] SUCCESS: User ${client.user.username} joined room ${roomName}`);
 
-            // Notify others in the circle
-            client.to(roomName).emit('user:joined', {
-                userId: client.user.id,
-                username: client.user.username,
-            });
+            this.trackSocketCircle(client.id, data.circleId);
+            this.addPresence(data.circleId, client.user.id, client.id);
+            this.emitCirclePresence(data.circleId);
+
+
+            client.emit('circle:joined', { circleId: data.circleId });
+            return { success: true };
 
             return { success: true, circleId: data.circleId };
         } catch (error) {
@@ -144,15 +209,51 @@ export class MessagesGateway implements OnGatewayConnection, OnGatewayDisconnect
     ) {
         if (!client.user) {
             return { error: 'Not authenticated' };
+
+
         }
 
-        const roomName = `circle:${data.circleId}`;
-        client.leave(roomName);
+        await client.leave(`circle:${data.circleId}`);
 
-        // Notify others
-        client.to(roomName).emit('user:left', {
+        this.untrackSocketCircle(client.id, data.circleId);
+        this.removePresence(data.circleId, client.user.id, client.id);
+        this.emitCirclePresence(data.circleId);
+
+        return { success: true };
+    }
+
+    // Typing indicators
+    @SubscribeMessage('typing:start')
+    async handleTypingStart(
+        @ConnectedSocket() client: AuthenticatedSocket,
+        @MessageBody() data: { circleId: number },
+    ) {
+        if (!client.user) {
+            return { error: 'Not authenticated' };
+        }
+
+        client.to(`circle:${data.circleId}`).emit('circle:typing', {
+            circleId: data.circleId,
             userId: client.user.id,
-            username: client.user.username,
+            isTyping: true,
+        });
+
+        return { success: true };
+    }
+
+    @SubscribeMessage('typing:stop')
+    async handleTypingStop(
+        @ConnectedSocket() client: AuthenticatedSocket,
+        @MessageBody() data: { circleId: number },
+    ) {
+        if (!client.user) {
+            return { error: 'Not authenticated' };
+        }
+
+        client.to(`circle:${data.circleId}`).emit('circle:typing', {
+            circleId: data.circleId,
+            userId: client.user.id,
+            isTyping: false,
         });
 
         return { success: true };
@@ -188,37 +289,6 @@ export class MessagesGateway implements OnGatewayConnection, OnGatewayDisconnect
             console.error('Error sending message:', error);
             return { error: error.message || 'Failed to send message' };
         }
-    }
-
-    // Typing indicator
-    @SubscribeMessage('typing:start')
-    async handleTypingStart(
-        @ConnectedSocket() client: AuthenticatedSocket,
-        @MessageBody() data: { circleId: number },
-    ) {
-        if (!client.user) return;
-
-        const roomName = `circle:${data.circleId}`;
-        client.to(roomName).emit('typing:update', {
-            userId: client.user.id,
-            username: client.user.username,
-            isTyping: true,
-        });
-    }
-
-    @SubscribeMessage('typing:stop')
-    async handleTypingStop(
-        @ConnectedSocket() client: AuthenticatedSocket,
-        @MessageBody() data: { circleId: number },
-    ) {
-        if (!client.user) return;
-
-        const roomName = `circle:${data.circleId}`;
-        client.to(roomName).emit('typing:update', {
-            userId: client.user.id,
-            username: client.user.username,
-            isTyping: false,
-        });
     }
 
     broadcastMessageUpdated(message: { circleId: number }) {

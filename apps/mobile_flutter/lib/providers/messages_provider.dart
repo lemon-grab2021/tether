@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../data/models/message.dart';
 import '../data/services/messages_service.dart';
@@ -8,6 +9,8 @@ import '../core/constants/api_constants.dart';
 class MessagesProvider extends ChangeNotifier {
   final MessagesService _messagesService = MessagesService();
   final AuthService _authService = AuthService();
+  final Set<int> _typingUserIds = {};
+  final Set<int> _onlineUserIds = {};
 
   IO.Socket? _socket;
   List<Message> _messages = [];
@@ -15,12 +18,16 @@ class MessagesProvider extends ChangeNotifier {
   bool _isConnected = false;
   bool _isJoinedRoom = false;
   String? _error;
+  Timer? _typingDebounce;
+  bool _iAmTyping = false;
 
   List<Message> get messages => _messages;
   bool get isLoading => _isLoading;
   bool get isConnected => _isConnected;
   bool get isJoinedRoom => _isJoinedRoom;
   String? get error => _error;
+  Set<int> get typingUserIds => _typingUserIds;
+  Set<int> get onlineUserIds => _onlineUserIds;
 
   // Load messages for a circle
   Future<void> loadMessages(int circleId, {int? cursor}) async {
@@ -157,6 +164,37 @@ class MessagesProvider extends ChangeNotifier {
       notifyListeners();
     });
 
+    // listen for presence of member in circle
+    _socket!.on('circle:presence', (data) {
+      final map = Map<String, dynamic>.from(data as Map);
+      final ids = (map['onlineUserIds'] as List<dynamic>? ?? [])
+          .map((e) => int.tryParse(e.toString()))
+          .whereType<int>()
+          .toSet();
+
+      _socket!.on('circle:typing', (data) {
+        final map = Map<String, dynamic>.from(data as Map);
+        final userId = int.tryParse(map['userId'].toString());
+        final isTyping = map['isTyping'] == true;
+
+        if (userId == null) return;
+
+        if (isTyping) {
+          _typingUserIds.add(userId);
+        } else {
+          _typingUserIds.remove(userId);
+        }
+
+        notifyListeners();
+      });
+
+      _onlineUserIds
+        ..clear()
+        ..addAll(ids);
+
+      notifyListeners();
+    });
+
     // Listen for disconnects
     _socket!.onDisconnect((_) {
       // ignore: avoid_print
@@ -248,11 +286,40 @@ class MessagesProvider extends ChangeNotifier {
     _socket!.connect();
   }
 
+  void handleComposerChanged({required int circleId, required String value}) {
+    final trimmed = value.trim();
+
+    if (trimmed.isEmpty) {
+      stopTyping(circleId);
+      return;
+    }
+
+    if (!_iAmTyping) {
+      _iAmTyping = true;
+      _socket?.emit('typing:start', {'circleId': circleId});
+    }
+
+    _typingDebounce?.cancel();
+    _typingDebounce = Timer(const Duration(milliseconds: 1200), () {
+      stopTyping(circleId);
+    });
+  }
+
+  void stopTyping(int circleId) {
+    if (!_iAmTyping) return;
+
+    _iAmTyping = false;
+    _typingDebounce?.cancel();
+    _socket?.emit('typing:stop', {'circleId': circleId});
+  }
+
   // Send message via WebSocket
   void sendMessage({required int circleId, String? body, String? mediaUrl}) {
     if (_socket == null || !_isConnected) {
       throw Exception('Not connected to WebSocket');
     }
+
+    stopTyping(circleId);
 
     _socket!.emit('message:send', {
       'circleId': circleId,
@@ -263,15 +330,21 @@ class MessagesProvider extends ChangeNotifier {
 
   // Disconnect from Websocket
   void disconnect() {
-    if (_socket != null) {
-      _socket!.disconnect();
-      _socket!.dispose();
-      _socket = null;
-      _isConnected = false;
-      _isJoinedRoom = false;
-      notifyListeners();
-    }
+  _typingDebounce?.cancel();
+  _typingUserIds.clear();
+  _onlineUserIds.clear();
+  _iAmTyping = false;
+
+  if (_socket != null) {
+    _socket!.disconnect();
+    _socket!.dispose();
+    _socket = null;
   }
+
+  _isConnected = false;
+  _isJoinedRoom = false;
+  notifyListeners();
+}
 
   @override
   void dispose() {

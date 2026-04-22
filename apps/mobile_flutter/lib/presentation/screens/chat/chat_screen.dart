@@ -21,6 +21,36 @@ class _ChatScreenState extends State<ChatScreen> {
 
   MessagesProvider? _messagesProvider;
 
+  List<String> _typingNames(MessagesProvider provider, int? currentUserId) {
+    final members = widget.circle.members ?? [];
+
+    return members
+        .where(
+          (m) =>
+              m.user != null &&
+              m.user!.id != currentUserId &&
+              provider.typingUserIds.contains(m.user!.id),
+        )
+        .map((m) => m.user!.displayName)
+        .toList();
+  }
+
+  String _typingLabel(List<String> names) {
+    if (names.isEmpty) return '';
+    if (names.length == 1) return '${names.first} is typing...';
+    if (names.length == 2) return '${names[0]} and ${names[1]} are typing...';
+    return '${names[0]}, ${names[1]} and others are typing...';
+  }
+
+  int _onlineCount(MessagesProvider provider) {
+    final members = widget.circle.members ?? [];
+    return members
+        .where(
+          (m) => m.user != null && provider.onlineUserIds.contains(m.user!.id),
+        )
+        .length;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -70,10 +100,7 @@ class _ChatScreenState extends State<ChatScreen> {
     }
 
     try {
-      provider.sendMessage(
-        circleId: widget.circle.id,
-        body: text,
-      );
+      provider.sendMessage(circleId: widget.circle.id, body: text);
       _messageController.clear();
       setState(() {});
       Future.delayed(const Duration(milliseconds: 100), _scrollToBottom);
@@ -91,7 +118,10 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   String _memberCountText() {
-    final count = widget.circle.messageCount?.members ?? widget.circle.members?.length ?? 0;
+    final count =
+        widget.circle.messageCount?.members ??
+        widget.circle.members?.length ??
+        0;
     return '$count member${count == 1 ? '' : 's'}';
   }
 
@@ -101,6 +131,7 @@ class _ChatScreenState extends State<ChatScreen> {
     final authProvider = context.watch<AuthProvider>();
     final currentUserId = authProvider.user?.id;
     final messages = provider.messages;
+    final typingNames = _typingNames(provider, currentUserId);
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (messages.isNotEmpty) {
@@ -144,7 +175,7 @@ class _ChatScreenState extends State<ChatScreen> {
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        '${_memberCountText()}'
+                        '${_memberCountText()} · ${_onlineCount(provider)} online'
                         '${provider.isJoinedRoom ? ' · connected' : ''}',
                         style: const TextStyle(
                           fontSize: 13,
@@ -184,72 +215,114 @@ class _ChatScreenState extends State<ChatScreen> {
             child: provider.isLoading
                 ? const Center(child: CircularProgressIndicator())
                 : provider.error != null && messages.isEmpty
-                    ? Center(
-                        child: Padding(
-                          padding: const EdgeInsets.all(24),
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
+                ? Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.error_outline_rounded,
+                            size: 54,
+                            color: Colors.blueGrey.shade300,
+                          ),
+                          const SizedBox(height: 14),
+                          const Text(
+                            'Could not load messages',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w800,
+                              color: Color(0xFF0F172A),
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            provider.error!,
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                              fontSize: 14.5,
+                              color: Color(0xFF64748B),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  )
+                : ListView.builder(
+                    controller: _scrollController,
+                    padding: const EdgeInsets.fromLTRB(12, 16, 12, 16),
+                    itemCount: messages.length + 1,
+                    itemBuilder: (context, index) {
+                      if (index == 0) {
+                        return _CircleConversationIntro(circle: widget.circle);
+                      }
+
+                      final message = messages[index - 1];
+                      final prev = index - 2 >= 0 ? messages[index - 2] : null;
+                      final next = index < messages.length
+                          ? messages[index]
+                          : null;
+
+                      final isMe = message.senderId == currentUserId;
+                      final senderChangedFromPrevious =
+                          prev == null || prev.senderId != message.senderId;
+                      final senderChangesNext =
+                          next == null || next.senderId != message.senderId;
+
+                      final showSender = !isMe && senderChangedFromPrevious;
+                      final showAvatar = !isMe && senderChangesNext;
+                      final showTimestamp = true;
+
+                      return _CircleMessageBubble(
+                        message: message,
+                        isMe: isMe,
+                        showSender: showSender,
+                        showAvatar: showAvatar,
+                        showTail: senderChangesNext,
+                        showTimestamp: showTimestamp,
+                      );
+                    },
+                  ),
+          ),
+          AnimatedSwitcher(
+            duration: const Duration(milliseconds: 180),
+            child: typingNames.isEmpty
+                ? const SizedBox.shrink()
+                : Padding(
+                    padding: const EdgeInsets.fromLTRB(18, 0, 18, 8),
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 8,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(18),
+                            border: Border.all(
+                              color: const Color(0xFFE2E8F0),
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
                             children: [
-                              Icon(
-                                Icons.error_outline_rounded,
-                                size: 54,
-                                color: Colors.blueGrey.shade300,
-                              ),
-                              const SizedBox(height: 14),
-                              const Text(
-                                'Could not load messages',
-                                style: TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.w800,
-                                  color: Color(0xFF0F172A),
-                                ),
-                              ),
-                              const SizedBox(height: 8),
+                              const _TypingDots(),
+                              const SizedBox(width: 8),
                               Text(
-                                provider.error!,
-                                textAlign: TextAlign.center,
+                                _typingLabel(typingNames),
                                 style: const TextStyle(
-                                  fontSize: 14.5,
+                                  fontSize: 13.5,
                                   color: Color(0xFF64748B),
+                                  fontWeight: FontWeight.w500,
                                 ),
                               ),
                             ],
                           ),
                         ),
-                      )
-                    : ListView.builder(
-                        controller: _scrollController,
-                        padding: const EdgeInsets.fromLTRB(12, 16, 12, 16),
-                        itemCount: messages.length + 1,
-                        itemBuilder: (context, index) {
-                          if (index == 0) {
-                            return _CircleConversationIntro(circle: widget.circle);
-                          }
-
-                          final message = messages[index - 1];
-                          final prev = index - 2 >= 0 ? messages[index - 2] : null;
-                          final next = index < messages.length ? messages[index] : null;
-
-                          final isMe = message.senderId == currentUserId;
-                          final senderChangedFromPrevious =
-                              prev == null || prev.senderId != message.senderId;
-                          final senderChangesNext =
-                              next == null || next.senderId != message.senderId;
-
-                          final showSender = !isMe && senderChangedFromPrevious;
-                          final showAvatar = !isMe && senderChangesNext;
-                          final showTimestamp = true;
-
-                          return _CircleMessageBubble(
-                            message: message,
-                            isMe: isMe,
-                            showSender: showSender,
-                            showAvatar: showAvatar,
-                            showTail: senderChangesNext,
-                            showTimestamp: showTimestamp,
-                          );
-                        },
-                      ),
+                      ],
+                    ),
+                  ),
           ),
           SafeArea(
             top: false,
@@ -257,9 +330,7 @@ class _ChatScreenState extends State<ChatScreen> {
               padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
               decoration: BoxDecoration(
                 color: const Color(0xFFF8FBFF),
-                border: const Border(
-                  top: BorderSide(color: Color(0xFFE2E8F0)),
-                ),
+                border: const Border(top: BorderSide(color: Color(0xFFE2E8F0))),
                 boxShadow: [
                   BoxShadow(
                     color: Colors.black.withOpacity(0.03),
@@ -291,11 +362,17 @@ class _ChatScreenState extends State<ChatScreen> {
                               controller: _messageController,
                               minLines: 1,
                               maxLines: 4,
-                              onChanged: (_) => setState(() {}),
+                              onChanged: (value) {
+                                setState(() {});
+                                context.read<MessagesProvider>().handleComposerChanged(
+                                      circleId: widget.circle.id,
+                                      value: value,
+                                    );
+                              },
                               textInputAction: TextInputAction.send,
                               onSubmitted: (_) => _sendMessage(),
                               decoration: InputDecoration(
-                                hintText: 'Message ${widget.circle.name}...',
+                                hintText: 'Message...',
                                 border: InputBorder.none,
                                 contentPadding: const EdgeInsets.symmetric(
                                   vertical: 14,
@@ -324,10 +401,16 @@ class _ChatScreenState extends State<ChatScreen> {
                       shape: BoxShape.circle,
                     ),
                     child: IconButton(
-                      onPressed: hasTypedText && provider.isJoinedRoom ? _sendMessage : null,
+                      onPressed: hasTypedText && provider.isJoinedRoom
+                          ? _sendMessage
+                          : null,
                       icon: Icon(
-                        hasTypedText ? Icons.send_rounded : Icons.mic_none_rounded,
-                        color: hasTypedText ? Colors.white : const Color(0xFF64748B),
+                        hasTypedText
+                            ? Icons.send_rounded
+                            : Icons.mic_none_rounded,
+                        color: hasTypedText
+                            ? Colors.white
+                            : const Color(0xFF64748B),
                       ),
                     ),
                   ),
@@ -357,7 +440,8 @@ class _CircleConversationIntro extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final memberCount = circle.messageCount?.members ?? circle.members?.length ?? 0;
+    final memberCount =
+        circle.messageCount?.members ?? circle.members?.length ?? 0;
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 20, top: 4),
@@ -469,7 +553,9 @@ class _CircleMessageBubble extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 10),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.end,
-        mainAxisAlignment: isMe ? MainAxisAlignment.end : MainAxisAlignment.start,
+        mainAxisAlignment: isMe
+            ? MainAxisAlignment.end
+            : MainAxisAlignment.start,
         children: [
           if (!isMe)
             SizedBox(
@@ -488,8 +574,9 @@ class _CircleMessageBubble extends StatelessWidget {
           if (!isMe) const SizedBox(width: 8),
           Flexible(
             child: Column(
-              crossAxisAlignment:
-                  isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+              crossAxisAlignment: isMe
+                  ? CrossAxisAlignment.end
+                  : CrossAxisAlignment.start,
               children: [
                 if (showSender)
                   Padding(
@@ -516,8 +603,12 @@ class _CircleMessageBubble extends StatelessWidget {
                     borderRadius: BorderRadius.only(
                       topLeft: const Radius.circular(22),
                       topRight: const Radius.circular(22),
-                      bottomLeft: Radius.circular(isMe ? 22 : (showTail ? 8 : 22)),
-                      bottomRight: Radius.circular(isMe ? (showTail ? 8 : 22) : 22),
+                      bottomLeft: Radius.circular(
+                        isMe ? 22 : (showTail ? 8 : 22),
+                      ),
+                      bottomRight: Radius.circular(
+                        isMe ? (showTail ? 8 : 22) : 22,
+                      ),
                     ),
                     border: isMe
                         ? null
@@ -531,8 +622,9 @@ class _CircleMessageBubble extends StatelessWidget {
                     ],
                   ),
                   child: Column(
-                    crossAxisAlignment:
-                        isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+                    crossAxisAlignment: isMe
+                        ? CrossAxisAlignment.end
+                        : CrossAxisAlignment.start,
                     children: [
                       if (message.body != null)
                         Text(
@@ -540,7 +632,9 @@ class _CircleMessageBubble extends StatelessWidget {
                           style: TextStyle(
                             fontSize: 15,
                             height: 1.35,
-                            color: isMe ? Colors.white : const Color(0xFF0F172A),
+                            color: isMe
+                                ? Colors.white
+                                : const Color(0xFF0F172A),
                             fontWeight: FontWeight.w500,
                           ),
                         ),
@@ -606,7 +700,10 @@ class _HeaderGroupAvatar extends StatelessWidget {
               left: 0,
               top: 6,
               child: _UserAvatar(
-                name: display[0].user?.displayName ?? display[0].user?.username ?? '?',
+                name:
+                    display[0].user?.displayName ??
+                    display[0].user?.username ??
+                    '?',
                 avatarUrl: display[0].user?.avatarUrl,
                 radius: 12,
               ),
@@ -616,7 +713,10 @@ class _HeaderGroupAvatar extends StatelessWidget {
               left: 14,
               top: 0,
               child: _UserAvatar(
-                name: display[1].user?.displayName ?? display[1].user?.username ?? '?',
+                name:
+                    display[1].user?.displayName ??
+                    display[1].user?.username ??
+                    '?',
                 avatarUrl: display[1].user?.avatarUrl,
                 radius: 12,
               ),
@@ -626,7 +726,10 @@ class _HeaderGroupAvatar extends StatelessWidget {
               left: 10,
               top: 16,
               child: _UserAvatar(
-                name: display[2].user?.displayName ?? display[2].user?.username ?? '?',
+                name:
+                    display[2].user?.displayName ??
+                    display[2].user?.username ??
+                    '?',
                 avatarUrl: display[2].user?.avatarUrl,
                 radius: 12,
               ),
@@ -659,17 +762,10 @@ class _SeedGroupAvatar extends StatelessWidget {
   final String seed;
   final double size;
 
-  const _SeedGroupAvatar({
-    required this.seed,
-    this.size = 42,
-  });
+  const _SeedGroupAvatar({required this.seed, this.size = 42});
 
   Color _colorForIndex(int index) {
-    const colors = [
-      Color(0xFF11C5B7),
-      Color(0xFF4F7DF3),
-      Color(0xFF6E63F6),
-    ];
+    const colors = [Color(0xFF11C5B7), Color(0xFF4F7DF3), Color(0xFF6E63F6)];
     return colors[index % colors.length];
   }
 
@@ -761,11 +857,7 @@ class _UserAvatar extends StatelessWidget {
   final String? avatarUrl;
   final double radius;
 
-  const _UserAvatar({
-    required this.name,
-    this.avatarUrl,
-    this.radius = 18,
-  });
+  const _UserAvatar({required this.name, this.avatarUrl, this.radius = 18});
 
   @override
   Widget build(BuildContext context) {
@@ -774,8 +866,9 @@ class _UserAvatar extends StatelessWidget {
     return CircleAvatar(
       radius: radius,
       backgroundColor: const Color(0xFFEDE9FE),
-      backgroundImage:
-          avatarUrl != null && avatarUrl!.trim().isNotEmpty ? NetworkImage(avatarUrl!) : null,
+      backgroundImage: avatarUrl != null && avatarUrl!.trim().isNotEmpty
+          ? NetworkImage(avatarUrl!)
+          : null,
       child: avatarUrl == null || avatarUrl!.trim().isEmpty
           ? Text(
               initial,
@@ -842,34 +935,116 @@ class _CircleMembersDrawer extends StatelessWidget {
                         ),
                       ),
                     )
-                  : ListView.builder(
-                      padding: const EdgeInsets.symmetric(vertical: 8),
-                      itemCount: members.length,
-                      itemBuilder: (context, index) {
-                        final member = members[index];
-                        final name = member.user?.displayName ??
-                            member.user?.username ??
-                            'Unknown';
+                  : Builder(
+                      builder: (context) {
+                        final provider = context.watch<MessagesProvider>();
 
-                        return ListTile(
-                          leading: _UserAvatar(
-                            name: name,
-                            avatarUrl: member.user?.avatarUrl,
-                            radius: 20,
-                          ),
-                          title: Text(
-                            name,
-                            style: const TextStyle(
-                              fontWeight: FontWeight.w700,
-                              color: Color(0xFF0F172A),
+                        final onlineMembers = members.where((m) {
+                          final userId = m.user?.id;
+                          return userId != null &&
+                              provider.onlineUserIds.contains(userId);
+                        }).toList();
+
+                        final offlineMembers = members.where((m) {
+                          final userId = m.user?.id;
+                          return userId == null ||
+                              !provider.onlineUserIds.contains(userId);
+                        }).toList();
+
+                        Widget buildMemberTile(
+                          CircleMember member, {
+                          required bool online,
+                        }) {
+                          final name =
+                              member.user?.displayName ??
+                              member.user?.username ??
+                              'Unknown';
+
+                          return ListTile(
+                            leading: Stack(
+                              children: [
+                                _UserAvatar(
+                                  name: name,
+                                  avatarUrl: member.user?.avatarUrl,
+                                  radius: 20,
+                                ),
+                                Positioned(
+                                  right: 0,
+                                  bottom: 0,
+                                  child: Container(
+                                    width: 11,
+                                    height: 11,
+                                    decoration: BoxDecoration(
+                                      color: online ? Colors.green : Colors.grey,
+                                      shape: BoxShape.circle,
+                                      border: Border.all(
+                                        color: Colors.white,
+                                        width: 2,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
-                          ),
-                          subtitle: Text(
-                            member.role,
-                            style: const TextStyle(
-                              color: Color(0xFF64748B),
+                            title: Text(
+                              name,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w700,
+                                color: Color(0xFF0F172A),
+                              ),
                             ),
-                          ),
+                            subtitle: Text(
+                              online ? 'Online' : 'Offline',
+                              style: const TextStyle(
+                                color: Color(0xFF64748B),
+                              ),
+                            ),
+                          );
+                        }
+
+                        return ListView(
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          children: [
+                            if (onlineMembers.isNotEmpty) ...[
+                              Padding(
+                                padding: const EdgeInsets.fromLTRB(18, 6, 18, 8),
+                                child: Text(
+                                  'ONLINE — ${onlineMembers.length}',
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    letterSpacing: 0.6,
+                                    fontWeight: FontWeight.w800,
+                                    color: Color(0xFF64748B),
+                                  ),
+                                ),
+                              ),
+                              ...onlineMembers.map(
+                                (m) => buildMemberTile(m, online: true),
+                              ),
+                            ],
+                            if (offlineMembers.isNotEmpty) ...[
+                              Padding(
+                                padding: const EdgeInsets.fromLTRB(
+                                  18,
+                                  14,
+                                  18,
+                                  8,
+                                ),
+                                child: Text(
+                                  'OFFLINE — ${offlineMembers.length}',
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    letterSpacing: 0.6,
+                                    fontWeight: FontWeight.w800,
+                                    color: Color(0xFF64748B),
+                                  ),
+                                ),
+                              ),
+                              ...offlineMembers.map(
+                                (m) => buildMemberTile(m, online: false),
+                              ),
+                            ],
+                          ],
                         );
                       },
                     ),
@@ -888,7 +1063,8 @@ class _CircleInfoSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final memberCount = circle.messageCount?.members ?? circle.members?.length ?? 0;
+    final memberCount =
+        circle.messageCount?.members ?? circle.members?.length ?? 0;
     final messageCount = circle.messageCount?.messages ?? 0;
 
     return Container(
@@ -931,9 +1107,7 @@ class _CircleInfoSheet extends StatelessWidget {
                         const SizedBox(height: 4),
                         Text(
                           circle.isPrivate ? 'Private circle' : 'Public circle',
-                          style: const TextStyle(
-                            color: Color(0xFF64748B),
-                          ),
+                          style: const TextStyle(color: Color(0xFF64748B)),
                         ),
                       ],
                     ),
@@ -945,7 +1119,8 @@ class _CircleInfoSheet extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 18),
-              if (circle.description != null && circle.description!.trim().isNotEmpty)
+              if (circle.description != null &&
+                  circle.description!.trim().isNotEmpty)
                 Container(
                   width: double.infinity,
                   padding: const EdgeInsets.all(16),
@@ -963,7 +1138,8 @@ class _CircleInfoSheet extends StatelessWidget {
                     ),
                   ),
                 ),
-              if (circle.description != null && circle.description!.trim().isNotEmpty)
+              if (circle.description != null &&
+                  circle.description!.trim().isNotEmpty)
                 const SizedBox(height: 14),
               Row(
                 children: [
@@ -994,10 +1170,7 @@ class _InfoStatCard extends StatelessWidget {
   final String label;
   final String value;
 
-  const _InfoStatCard({
-    required this.label,
-    required this.value,
-  });
+  const _InfoStatCard({required this.label, required this.value});
 
   @override
   Widget build(BuildContext context) {
@@ -1021,13 +1194,72 @@ class _InfoStatCard extends StatelessWidget {
           const SizedBox(height: 4),
           Text(
             label,
-            style: const TextStyle(
-              color: Color(0xFF64748B),
-              fontSize: 13.5,
-            ),
+            style: const TextStyle(color: Color(0xFF64748B), fontSize: 13.5),
           ),
         ],
       ),
+    );
+  }
+}
+class _TypingDots extends StatefulWidget {
+  const _TypingDots();
+
+  @override
+  State<_TypingDots> createState() => _TypingDotsState();
+}
+
+class _TypingDotsState extends State<_TypingDots>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 900),
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Widget _dot(double delay) {
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, child) {
+        final value = (_controller.value - delay).clamp(0.0, 1.0);
+        final opacity = (value <= 0.5) ? value * 2 : (1 - value) * 2;
+
+        return Opacity(
+          opacity: opacity.clamp(0.25, 1.0),
+          child: Container(
+            width: 8,
+            height: 8,
+            decoration: const BoxDecoration(
+              color: Color(0xFF94A3B8),
+              shape: BoxShape.circle,
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _dot(0.0),
+        const SizedBox(width: 6),
+        _dot(0.2),
+        const SizedBox(width: 6),
+        _dot(0.4),
+      ],
     );
   }
 }
