@@ -7,6 +7,7 @@ import 'providers/direct_conversations_provider.dart';
 import 'providers/direct_messages_provider.dart';
 import 'presentation/screens/auth/login_screen.dart';
 import 'presentation/screens/home/main_shell.dart';
+import 'providers/links_provider.dart';
 
 void main() {
   runApp(const MyApp());
@@ -24,6 +25,7 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => MessagesProvider()),
         ChangeNotifierProvider(create: (_) => DirectConversationsProvider()),
         ChangeNotifierProvider(create: (_) => DirectMessagesProvider()),
+        ChangeNotifierProvider(create: (_) => LinksProvider()),
       ],
       child: MaterialApp(
         title: 'Tether',
