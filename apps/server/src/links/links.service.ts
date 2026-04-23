@@ -57,11 +57,11 @@ export class LinksService {
                     (r.receiverId === currentUserId && r.senderId === user.id),
             );
 
-            let relationship: 'none' | 'outgoing_pending' | 'incoming_pending' | 'contact' = 'none';
+            let relationship: 'none' | 'outgoing_pending' | 'incoming_pending' | 'link' = 'none';
 
             if (rel) {
                 if (rel.status === LinkRequestStatus.ACCEPTED) {
-                    relationship = 'contact';
+                    relationship = 'link';
                 } else if (rel.status === LinkRequestStatus.PENDING) {
                     relationship =
                         rel.senderId === currentUserId ? 'outgoing_pending' : 'incoming_pending'; // If current user sent the request, it's outgoing. If they received it, it's incoming.
@@ -69,7 +69,7 @@ export class LinksService {
             }
 
             return {
-                ...user,
+                user,
                 relationship,
                 requestId: rel?.id ?? null,
             };
