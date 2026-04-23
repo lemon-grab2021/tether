@@ -6,6 +6,7 @@ import '../../../providers/circles_provider.dart';
 import '../../../data/services/auth_service.dart';
 import '../../../data/services/links_service.dart';
 import '../auth/login_screen.dart';
+import '../deleted/deleted_conversations_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -111,23 +112,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
     if (user == null) {
       return Scaffold(
         backgroundColor: const Color(0xFFF3F7FB),
-        body: const SafeArea(
-          child: Center(
-            child: Text('Not logged in'),
-          ),
-        ),
+        body: const SafeArea(child: Center(child: Text('Not logged in'))),
       );
     }
 
     final displayName =
         (user.displayName != null && user.displayName!.trim().isNotEmpty)
-            ? user.displayName!.trim()
-            : user.username;
+        ? user.displayName!.trim()
+        : user.username;
 
     final avatarUrl =
         (user.avatarUrl != null && user.avatarUrl!.trim().isNotEmpty)
-            ? user.avatarUrl!.trim()
-            : null;
+        ? user.avatarUrl!.trim()
+        : null;
 
     final initial = displayName.isNotEmpty ? displayName[0].toUpperCase() : '?';
     final joinedDate = DateFormat('MMMM yyyy').format(user.createdAt!);
@@ -170,10 +167,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(24),
-                  border: Border.all(
-                    color: const Color(0xFFE2E8F0),
-                    width: 1,
-                  ),
+                  border: Border.all(color: const Color(0xFFE2E8F0), width: 1),
                   boxShadow: [
                     BoxShadow(
                       color: Colors.black.withOpacity(0.03),
@@ -428,6 +422,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       });
                     },
                   ),
+                  _SettingsItem(
+                    icon: Icons.delete_outline_rounded,
+                    label: 'Deleted conversations',
+                    subtitle: 'Restore or permanently remove deleted chats',
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const DeletedConversationsScreen(),
+                        ),
+                      );
+                    },
+                  ),
                 ],
               ),
 
@@ -478,10 +485,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               const Center(
                 child: Text(
                   'Tether v1.0.0',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Color(0xFF94A3B8),
-                  ),
+                  style: TextStyle(fontSize: 12, color: Color(0xFF94A3B8)),
                 ),
               ),
             ],
@@ -525,9 +529,7 @@ class _SettingsGroup extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(22),
-        border: Border.all(
-          color: const Color(0xFFE2E8F0),
-        ),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.03),
@@ -573,9 +575,7 @@ class _SettingsItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return InkWell(
-      onTap: isToggle
-          ? () => onToggleChanged?.call(!toggleValue)
-          : onTap,
+      onTap: isToggle ? () => onToggleChanged?.call(!toggleValue) : onTap,
       borderRadius: BorderRadius.circular(22),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
@@ -588,11 +588,7 @@ class _SettingsItem extends StatelessWidget {
                 color: const Color(0xFFEAF4FF),
                 borderRadius: BorderRadius.circular(14),
               ),
-              child: Icon(
-                icon,
-                color: const Color(0xFF1274E7),
-                size: 22,
-              ),
+              child: Icon(icon, color: const Color(0xFF1274E7), size: 22),
             ),
             const SizedBox(width: 14),
             Expanded(
@@ -627,10 +623,7 @@ class _SettingsItem extends StatelessWidget {
                 activeColor: const Color(0xFF1274E7),
               )
             else
-              const Icon(
-                Icons.chevron_right_rounded,
-                color: Color(0xFF94A3B8),
-              ),
+              const Icon(Icons.chevron_right_rounded, color: Color(0xFF94A3B8)),
           ],
         ),
       ),

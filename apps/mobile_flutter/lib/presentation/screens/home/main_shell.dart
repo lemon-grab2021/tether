@@ -1,6 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-import '../../../providers/links_provider.dart';
 import '../home/home_screen.dart';
 import '../home/links_screen.dart';
 import '../profile/profile_screen.dart';
@@ -18,10 +16,7 @@ class _MainShellState extends State<MainShell> {
   late final List<Widget> _screens = [
     const HomeScreen(),
     // const _SearchPlaceholderScreen(),
-    ChangeNotifierProvider(
-      create: (_) => LinksProvider(),
-      child: const LinksScreen(),
-    ),
+    const LinksScreen(),
     const ProfileScreen(),
   ];
 
@@ -66,15 +61,3 @@ class _MainShellState extends State<MainShell> {
   }
 }
 
-// class _SearchPlaceholderScreen extends StatelessWidget {
-//   const _SearchPlaceholderScreen();
-
-//   @override
-//   Widget build(BuildContext context) {
-//     return const Scaffold(
-//       body: Center(
-//         child: Text('Search coming soon'),
-//       ),
-//     );
-//   }
-// }

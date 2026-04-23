@@ -3,6 +3,7 @@ import '../data/models/direct_conversation.dart';
 import '../data/services/auth_service.dart';
 import '../data/services/direct_messages_service.dart';
 
+
 class DirectConversationsProvider extends ChangeNotifier {
   final DirectMessagesService _directMessagesService = DirectMessagesService();
   final AuthService _authService = AuthService();
@@ -61,6 +62,35 @@ class DirectConversationsProvider extends ChangeNotifier {
     } catch (_) {
       // Keep current conversations visible during background refresh
     }
+  }
+
+  Future<void> deleteConversation({
+    required int conversationId,
+    required String token,
+    required int currentUserId,
+  }) async {
+    await _directMessagesService.deleteConversation(
+      token: token,
+      conversationId: conversationId,
+    );
+
+    conversations.removeWhere((c) => c.id == conversationId);
+    notifyListeners();
+
+    await loadConversations(currentUserId: currentUserId);
+  }
+
+  Future<void> restoreConversation({
+    required int conversationId,
+    required String token,
+    required int currentUserId,
+  }) async {
+    await _directMessagesService.restoreConversation(
+      token: token,
+      conversationId: conversationId,
+    );
+
+    await loadConversations(currentUserId: currentUserId);
   }
 
   void clear() {

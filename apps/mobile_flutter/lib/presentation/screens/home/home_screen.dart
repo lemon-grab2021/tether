@@ -38,6 +38,8 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+
       final authProvider = context.read<AuthProvider>();
       final circlesProvider = context.read<CirclesProvider>();
       final directConversationsProvider =
@@ -61,9 +63,9 @@ class _HomeScreenState extends State<HomeScreen> {
         context.read<CirclesProvider>().refreshCirclesSilently();
 
         if (currentUserId != null) {
-          context
-              .read<DirectConversationsProvider>()
-              .refreshConversationsSilently(currentUserId: currentUserId);
+          context.read<DirectConversationsProvider>().refreshConversationsSilently(
+                currentUserId: currentUserId,
+              );
         }
       });
     });
@@ -293,6 +295,11 @@ class _HomeScreenState extends State<HomeScreen> {
           ],
         ),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.search_rounded),
+            color: const Color(0xFF475569),
+            onPressed: _openSearchTab,
+          ),
           IconButton(
             icon: const Icon(Icons.people_alt_outlined),
             color: const Color(0xFF475569),

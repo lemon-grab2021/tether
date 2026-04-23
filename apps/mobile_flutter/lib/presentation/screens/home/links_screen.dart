@@ -605,9 +605,11 @@ class _LinksScreenState extends State<LinksScreen> {
         Widget trailing;
 
         final relationship = result.relationship.toLowerCase().trim();
+        
         switch (relationship) {
           case 'link':
           case 'linked':
+          case 'contact':
             trailing = ElevatedButton(
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFF1274E7),

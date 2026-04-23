@@ -7,18 +7,19 @@ import '../models/link_request.dart';
 
 class LinksService {
   Map<String, String> _headers(String token) => {
-        'Authorization': 'Bearer $token',
-        'Content-Type': 'application/json',
-      };
+    'Authorization': 'Bearer $token',
+    'Content-Type': 'application/json',
+  };
 
   Future<List<LinkSearchResult>> searchUsers({
     required String token,
     required String query,
   }) async {
-    final response = await http.get(
-      Uri.parse('${ApiConstants.baseUrl}/links/search?q=$query'),
-      headers: _headers(token),
-    );
+    final uri = Uri.parse(
+      '${ApiConstants.baseUrl}/links/search',
+    ).replace(queryParameters: {'q': query.trim()});
+
+    final response = await http.get(uri, headers: _headers(token));
 
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw Exception('Failed to search users');
@@ -97,9 +98,7 @@ class LinksService {
     }
   }
 
-  Future<List<LinkModel>> getLinks({
-    required String token,
-  }) async {
+  Future<List<LinkModel>> getLinks({required String token}) async {
     final response = await http.get(
       Uri.parse('${ApiConstants.baseUrl}/links'),
       headers: _headers(token),

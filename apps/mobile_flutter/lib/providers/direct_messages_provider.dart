@@ -298,6 +298,8 @@ class DirectMessagesProvider extends ChangeNotifier {
       notifyListeners();
     }
   }
+                  
+    
 
   void disconnect() {
     if (_socket != null) {

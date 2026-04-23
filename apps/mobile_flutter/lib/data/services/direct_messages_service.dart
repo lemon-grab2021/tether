@@ -162,4 +162,60 @@ class DirectMessagesService {
   return DirectConversation.fromJson(data, currentUserId);
 }
 
+  Future<void> deleteConversation({
+  required String token,
+  required int conversationId,
+}) async {
+  final response = await http.delete(
+    Uri.parse('${ApiConstants.baseUrl}/direct-conversations/$conversationId'),
+    headers: {
+      'Authorization': 'Bearer $token',
+      'Content-Type': 'application/json',
+    },
+  );
+
+  if (response.statusCode != 200 && response.statusCode != 204) {
+    throw Exception('Failed to delete conversation');
+  }
+}
+
+   Future<void> restoreConversation({
+  required String token,
+  required int conversationId,
+}) async {
+  final response = await http.post(
+    Uri.parse('${ApiConstants.baseUrl}/direct-conversations/$conversationId/restore'),
+    headers: {
+      'Authorization': 'Bearer $token',
+      'Content-Type': 'application/json',
+    },
+  );
+
+  if (response.statusCode != 200 && response.statusCode != 201) {
+    throw Exception('Failed to restore conversation');
+  }
+}
+
+  Future<List<DirectConversation>> getDeletedConversations({
+  required String token,
+  required int currentUserId,
+}) async {
+  final response = await http.get(
+    Uri.parse('${ApiConstants.baseUrl}/direct-conversations/deleted/list'),
+    headers: {
+      'Authorization': 'Bearer $token',
+      'Content-Type': 'application/json',
+    },
+  );
+
+  if (response.statusCode != 200) {
+    throw Exception('Failed to load deleted conversations');
+  }
+
+  final data = jsonDecode(response.body) as List;
+  return data
+      .map((json) => DirectConversation.fromJson(json, currentUserId))
+      .toList();
+}
+
 }

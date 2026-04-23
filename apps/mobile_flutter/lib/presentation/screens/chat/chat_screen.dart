@@ -4,6 +4,9 @@ import 'package:provider/provider.dart';
 import 'package:tether/providers/auth_provider.dart';
 import 'package:tether/providers/messages_provider.dart';
 import '../../../data/models/circle.dart';
+import '../../../providers/deleted_conversations_provider.dart';
+import '../../widgets/delete_conversation_sheet.dart';
+import '../../widgets/conversation_overflow_button.dart';
 
 class ChatScreen extends StatefulWidget {
   final Circle circle;
@@ -201,10 +204,28 @@ class _ChatScreenState extends State<ChatScreen> {
             icon: const Icon(Icons.settings_outlined),
             color: const Color(0xFF475569),
           ),
-          IconButton(
-            onPressed: () {},
-            icon: const Icon(Icons.more_vert_rounded),
-            color: const Color(0xFF475569),
+          ConversationOverflowButton(
+            onPin: () {},
+            onMute: () {},
+            onDelete: () async {
+              final confirmed = await showDeleteConversationSheet(
+                context,
+                title: widget.circle.name,
+                isCircle: true,
+              );
+
+              if (!confirmed || !mounted) return;
+
+              context.read<DeletedConversationsProvider>().softDeleteCircle(
+                widget.circle,
+              );
+
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Conversation moved to Deleted')),
+              );
+
+              Navigator.pop(context);
+            },
           ),
           const SizedBox(width: 4),
         ],
@@ -300,9 +321,7 @@ class _ChatScreenState extends State<ChatScreen> {
                           decoration: BoxDecoration(
                             color: Colors.white,
                             borderRadius: BorderRadius.circular(18),
-                            border: Border.all(
-                              color: const Color(0xFFE2E8F0),
-                            ),
+                            border: Border.all(color: const Color(0xFFE2E8F0)),
                           ),
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
@@ -364,7 +383,9 @@ class _ChatScreenState extends State<ChatScreen> {
                               maxLines: 4,
                               onChanged: (value) {
                                 setState(() {});
-                                context.read<MessagesProvider>().handleComposerChanged(
+                                context
+                                    .read<MessagesProvider>()
+                                    .handleComposerChanged(
                                       circleId: widget.circle.id,
                                       value: value,
                                     );
@@ -547,7 +568,9 @@ class _CircleMessageBubble extends StatelessWidget {
   Widget build(BuildContext context) {
     final senderName = message.sender?.displayName ?? 'Unknown';
     final senderAvatar = message.sender?.avatarUrl as String?;
-    final formattedTime = DateFormat('h:mm a').format(message.createdAt.toLocal());
+    final formattedTime = DateFormat(
+      'h:mm a',
+    ).format(message.createdAt.toLocal());
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
@@ -975,7 +998,9 @@ class _CircleMembersDrawer extends StatelessWidget {
                                     width: 11,
                                     height: 11,
                                     decoration: BoxDecoration(
-                                      color: online ? Colors.green : Colors.grey,
+                                      color: online
+                                          ? Colors.green
+                                          : Colors.grey,
                                       shape: BoxShape.circle,
                                       border: Border.all(
                                         color: Colors.white,
@@ -995,9 +1020,7 @@ class _CircleMembersDrawer extends StatelessWidget {
                             ),
                             subtitle: Text(
                               online ? 'Online' : 'Offline',
-                              style: const TextStyle(
-                                color: Color(0xFF64748B),
-                              ),
+                              style: const TextStyle(color: Color(0xFF64748B)),
                             ),
                           );
                         }
@@ -1007,7 +1030,12 @@ class _CircleMembersDrawer extends StatelessWidget {
                           children: [
                             if (onlineMembers.isNotEmpty) ...[
                               Padding(
-                                padding: const EdgeInsets.fromLTRB(18, 6, 18, 8),
+                                padding: const EdgeInsets.fromLTRB(
+                                  18,
+                                  6,
+                                  18,
+                                  8,
+                                ),
                                 child: Text(
                                   'ONLINE — ${onlineMembers.length}',
                                   style: const TextStyle(
@@ -1201,6 +1229,7 @@ class _InfoStatCard extends StatelessWidget {
     );
   }
 }
+
 class _TypingDots extends StatefulWidget {
   const _TypingDots();
 

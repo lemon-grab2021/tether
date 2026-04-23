@@ -6,6 +6,9 @@ import 'package:tether/providers/auth_provider.dart';
 import 'package:tether/providers/direct_messages_provider.dart';
 import '../../../data/models/direct_conversation.dart';
 import '../../../data/models/direct_message.dart';
+import '../../../providers/deleted_conversations_provider.dart';
+import '../../widgets/delete_conversation_sheet.dart';
+import '../../widgets/conversation_overflow_button.dart';
 
 class DirectChatScreen extends StatefulWidget {
   final DirectConversation conversation;
@@ -371,10 +374,36 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
                     icon: const Icon(Icons.videocam_outlined),
                     color: const Color(0xFF475569),
                   ),
-                  IconButton(
-                    onPressed: () {},
-                    icon: const Icon(Icons.more_vert),
-                    color: const Color(0xFF475569),
+                  ConversationOverflowButton(
+                    onPin: () {},
+                    onMute: () {},
+                    onDelete: () async {
+                      final otherUser = widget.conversation.otherUser;
+                      final displayName =
+                          (otherUser.displayName != null &&
+                              otherUser.displayName!.trim().isNotEmpty)
+                          ? otherUser.displayName!.trim()
+                          : otherUser.username;
+
+                      final confirmed = await showDeleteConversationSheet(
+                        context,
+                        title: displayName,
+                        isCircle: false,
+                      );
+
+                      if (!confirmed || !mounted) return;
+
+                      context
+                          .read<DeletedConversationsProvider>()
+                          .softDeleteDirectConversation(widget.conversation);
+
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Conversation moved to Deleted'),
+                        ),
+                      );
+                      Navigator.pop(context);
+                    },
                   ),
                 ],
               ),

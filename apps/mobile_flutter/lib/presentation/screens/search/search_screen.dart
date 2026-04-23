@@ -2,7 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
-
+import '../../../providers/deleted_conversations_provider.dart';
 import '../../../providers/auth_provider.dart';
 import '../../../providers/circles_provider.dart';
 import '../../../providers/direct_conversations_provider.dart';
@@ -11,7 +11,6 @@ import '../../../providers/links_provider.dart';
 
 import '../../../data/models/circle.dart';
 import '../../../data/models/direct_conversation.dart';
-import '../../../data/models/link_search_result.dart';
 import '../../../data/models/link_user.dart';
 import '../../../data/services/auth_service.dart';
 import '../../../data/services/direct_messages_service.dart';
@@ -527,19 +526,27 @@ class _SearchScreenState extends State<SearchScreen> {
     final authProvider = context.watch<AuthProvider>();
     final directProvider = context.watch<DirectConversationsProvider>();
     final linksProvider = context.watch<LinksProvider>();
+    final deletedProvider = context.watch<DeletedConversationsProvider>();
     final circlesProvider = context.watch<CirclesProvider>();
 
     final currentUserId = authProvider.user?.id;
 
     final messageResults = _buildMessageResults(
-      conversations: directProvider.conversations,
+      conversations: directProvider.conversations
+          .where((c) => !deletedProvider.isDirectConversationDeleted(c.id))
+          .toList(),
       currentUserId: currentUserId,
     );
+
     final peopleResults = _buildPeopleResults(
       linksProvider: linksProvider,
       currentUserId: currentUserId,
     );
-    final circleResults = _buildCircleResults(circlesProvider.circles);
+    final circleResults = _buildCircleResults(
+      circlesProvider.circles
+          .where((c) => !deletedProvider.isCircleDeleted(c.id))
+          .toList(),
+    );
 
     final groupedMessages = _groupMessages(messageResults);
 
@@ -1136,6 +1143,7 @@ class _PersonResultCard extends StatelessWidget {
     switch (relationship) {
       case 'link':
       case 'linked':
+      case 'contact':
         trailing = _ActionButton(
           label: 'Message',
           onTap: onMessage,

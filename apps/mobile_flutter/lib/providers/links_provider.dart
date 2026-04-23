@@ -16,6 +16,8 @@ class LinksProvider extends ChangeNotifier {
 
   bool _isLoading = false;
   String? _error;
+  String _lastSearchQuery = '';
+  bool _disposed = false;
 
   List<LinkSearchResult> get searchResults => _searchResults;
   List<LinkRequestModel> get incomingRequests => _incomingRequests;
@@ -23,7 +25,6 @@ class LinksProvider extends ChangeNotifier {
   List<LinkModel> get links => _links;
   bool get isLoading => _isLoading;
   String? get error => _error;
-  String _lastSearchQuery = '';
 
   Future<String> _getToken() async {
     final token = await _authService.getAccessToken();
@@ -31,69 +32,104 @@ class LinksProvider extends ChangeNotifier {
     return token;
   }
 
+  void _safeNotify() {
+    if (!_disposed) {
+      notifyListeners();
+    }
+  }
+
+  @override
+  void dispose() {
+    _disposed = true;
+    super.dispose();
+  }
+
   Future<void> searchUsers(String query) async {
-    if (query.trim().isEmpty) {
+    final trimmed = query.trim();
+
+    if (trimmed.isEmpty) {
+      _lastSearchQuery = '';
       _searchResults = [];
-      notifyListeners();
+      _error = null;
+      _isLoading = false;
+      _safeNotify();
       return;
     }
 
-    _lastSearchQuery = query.trim();
-
-    if (_lastSearchQuery.isEmpty) {
-      _searchResults = [];
-      notifyListeners();
-      return;
-    }
-
+    _lastSearchQuery = trimmed;
     _isLoading = true;
     _error = null;
-    notifyListeners();
+    _safeNotify();
 
     try {
       final token = await _getToken();
-      _searchResults = await _linksService.searchUsers(
+      final results = await _linksService.searchUsers(
         token: token,
-        query: query.trim(),
+        query: trimmed,
       );
+
+      if (_disposed) return;
+
+      _searchResults = results;
+      _error = null;
     } catch (e) {
+      if (_disposed) return;
+
+      _searchResults = [];
       _error = e.toString();
     } finally {
+      if (_disposed) return;
+
       _isLoading = false;
-      notifyListeners();
+      _safeNotify();
     }
   }
 
   Future<void> loadRequests() async {
     _isLoading = true;
     _error = null;
-    notifyListeners();
+    _safeNotify();
 
     try {
       final token = await _getToken();
-      _incomingRequests = await _linksService.getIncomingRequests(token: token);
-      _outgoingRequests = await _linksService.getOutgoingRequests(token: token);
+      final incoming = await _linksService.getIncomingRequests(token: token);
+      final outgoing = await _linksService.getOutgoingRequests(token: token);
+
+      if (_disposed) return;
+
+      _incomingRequests = incoming;
+      _outgoingRequests = outgoing;
+      _error = null;
     } catch (e) {
+      if (_disposed) return;
       _error = e.toString();
     } finally {
+      if (_disposed) return;
       _isLoading = false;
-      notifyListeners();
+      _safeNotify();
     }
   }
 
   Future<void> loadLinks() async {
     _isLoading = true;
     _error = null;
-    notifyListeners();
+    _safeNotify();
 
     try {
       final token = await _getToken();
-      _links = await _linksService.getLinks(token: token);
+      final links = await _linksService.getLinks(token: token);
+
+      if (_disposed) return;
+
+      _links = links;
+      _error = null;
     } catch (e) {
+      if (_disposed) return;
       _error = e.toString();
     } finally {
+      if (_disposed) return;
       _isLoading = false;
-      notifyListeners();
+      _safeNotify();
     }
   }
 
@@ -128,15 +164,21 @@ class LinksProvider extends ChangeNotifier {
 
     try {
       final token = await _getToken();
-      _searchResults = await _linksService.searchUsers(
+      final results = await _linksService.searchUsers(
         token: token,
         query: _lastSearchQuery,
       );
+
+      if (_disposed) return;
+
+      _searchResults = results;
       _error = null;
-      notifyListeners();
+      _safeNotify();
     } catch (e) {
+      if (_disposed) return;
+
       _error = e.toString();
-      notifyListeners();
+      _safeNotify();
     }
   }
 }
