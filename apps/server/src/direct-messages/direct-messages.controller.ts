@@ -5,6 +5,7 @@ import {
     Param,
     ParseIntPipe,
     Post,
+    Req,
     Patch,
     Delete,
     Query,
@@ -117,4 +118,34 @@ export class DirectMessagesController {
         );
     }
 
+    @Delete(':conversationId')
+    async deleteConversation(
+        @Param('conversationId', ParseIntPipe) conversationId: number,
+        @Req() req: any,
+    ) {
+        return this.directMessagesService.deleteConversationForUser(
+            conversationId,
+            req.user.userId,
+        );
+    }
+
+    @Post(':conversationId/restore')
+    async restoreConversation(
+        @Param('conversationId', ParseIntPipe) conversationId: number,
+        @Req() req: any,
+    ) {
+        return this.directMessagesService.restoreConversationForUser(
+            conversationId,
+            req.user.userId,
+        );
+    }
+
+    @Get('deleted/list')
+    async getDeletedConversations(@Req() req: any) {
+        return this.directMessagesService.getDeletedConversationsForUser(
+            req.user.userId,
+        );
+    }
 }
+
+

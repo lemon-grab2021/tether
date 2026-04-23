@@ -92,6 +92,9 @@ model DirectConversation {
   userOneLastReadAt DateTime?
   userTwoLastReadAt DateTime?
 
+  userOneDeletedAt DateTime?
+  userTwoDeletedAt DateTime?
+
   userOne User @relation("DirectConversationUserOne", fields: [userOneId], references: [id], onDelete: Cascade)
   userTwo User @relation("DirectConversationUserTwo", fields: [userTwoId], references: [id], onDelete: Cascade)
 
@@ -149,6 +152,8 @@ model CircleMember {
   circleId Int
   role     MemberRole @default(MEMBER)
   joinedAt DateTime   @default(now())
+
+  chatDeletedAt DateTime?
 
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
   circle Circle @relation(fields: [circleId], references: [id], onDelete: Cascade)

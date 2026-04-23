@@ -40,6 +40,11 @@ export class DirectMessagesService {
 
         const [userOneId, userTwoId] = this.normalizeUserPair(currentUserId, dto.otherUserId);
 
+        const restoreData =
+            currentUserId === userOneId
+                ? { userOneDeletedAt: null }
+                : { userTwoDeletedAt: null };
+
         return this.prisma.directConversation.upsert({
             where: {
                 userOneId_userTwoId: {
@@ -47,7 +52,7 @@ export class DirectMessagesService {
                     userTwoId,
                 },
             },
-            update: {},
+            update: restoreData,
             create: {
                 userOneId,
                 userTwoId,
@@ -65,24 +70,34 @@ export class DirectMessagesService {
         });
     }
 
+    private visibleConversationWhere(currentUserId: number) {
+        return {
+            OR: [
+                {
+                    userOneId: currentUserId,
+                    userOneDeletedAt: null,
+                },
+                {
+                    userTwoId: currentUserId,
+                    userTwoDeletedAt: null,
+                },
+            ],
+        };
+    }
+
     async listConversations(currentUserId: number) {
         return this.prisma.directConversation.findMany({
-            where: {
-                OR: [
-                    { userOneId: currentUserId },
-                    { userTwoId: currentUserId },
-                ],
-            },
-            orderBy: { lastMessageAt: 'desc' },
+            where: this.visibleConversationWhere(currentUserId),
             include: {
-                userOne: { select: this.userSelect },
-                userTwo: { select: this.userSelect },
+                userOne: true,
+                userTwo: true,
                 messages: {
-                    where: { deletedAt: null },
                     orderBy: { createdAt: 'desc' },
                     take: 1,
-                    include: { sender: { select: this.userSelect } },
                 },
+            },
+            orderBy: {
+                lastMessageAt: 'desc',
             },
         });
     }
@@ -237,6 +252,92 @@ export class DirectMessagesService {
                 sender: {
                     select: this.userSelect,
                 },
+            },
+        });
+    }
+
+    async deleteConversationForUser(conversationId: number, userId: number) {
+        const conversation = await this.prisma.directConversation.findFirst({
+            where: {
+                id: conversationId,
+                OR: [{ userOneId: userId }, { userTwoId: userId }],
+            },
+        });
+
+        if (!conversation) {
+            throw new NotFoundException('Conversation not found');
+        }
+
+        if (conversation.userOneId === userId) {
+            return this.prisma.directConversation.update({
+                where: { id: conversationId },
+                data: { userOneDeletedAt: new Date() },
+            });
+        }
+
+        if (conversation.userTwoId === userId) {
+            return this.prisma.directConversation.update({
+                where: { id: conversationId },
+                data: { userTwoDeletedAt: new Date() },
+            });
+        }
+
+        throw new ForbiddenException('Not a participant in this conversation');
+    }
+
+    async restoreConversationForUser(conversationId: number, userId: number) {
+        const conversation = await this.prisma.directConversation.findFirst({
+            where: {
+                id: conversationId,
+                OR: [{ userOneId: userId }, { userTwoId: userId }],
+            },
+        });
+
+        if (!conversation) {
+            throw new NotFoundException('Conversation not found');
+        }
+
+        if (conversation.userOneId === userId) {
+            return this.prisma.directConversation.update({
+                where: { id: conversationId },
+                data: { userOneDeletedAt: null },
+            });
+        }
+
+        if (conversation.userTwoId === userId) {
+            return this.prisma.directConversation.update({
+                where: { id: conversationId },
+                data: { userTwoDeletedAt: null },
+            });
+        }
+
+        throw new ForbiddenException('Not a participant in this conversation');
+    }
+
+    async getDeletedConversationsForUser(userId: number) {
+        return this.prisma.directConversation.findMany({
+            where: {
+                OR: [
+                    {
+                        userOneId: userId,
+                        userOneDeletedAt: { not: null },
+                    },
+                    {
+                        userTwoId: userId,
+                        userTwoDeletedAt: { not: null },
+                    },
+                ],
+            },
+            include: {
+                userOne: true,
+                userTwo: true,
+                messages: {
+                    orderBy: { createdAt: 'desc' },
+                    take: 1,
+                },
+            },
+            orderBy: {
+                updatedAt: 'desc',
             },
         });
     }
