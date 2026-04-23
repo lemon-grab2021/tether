@@ -37,6 +37,8 @@ class DirectMessagesProvider extends ChangeNotifier {
       final token = await _authService.getAccessToken();
       if (token == null) throw Exception('Not authenticated');
 
+      print('Loading direct messages for conversationId=$conversationId');
+
       final fetched = await _service.getMessages(
         token: token,
         conversationId: conversationId,
@@ -52,6 +54,8 @@ class DirectMessagesProvider extends ChangeNotifier {
         _messages.sort((a, b) => a.createdAt.compareTo(b.createdAt));
       }
     } catch (e) {
+      print('Direct messages load failed for conversationId=$conversationId');
+      print(e);
       _error = e.toString();
     } finally {
       _isLoading = false;
