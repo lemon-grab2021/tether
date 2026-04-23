@@ -6,6 +6,7 @@ import '../../../providers/auth_provider.dart';
 import '../../../providers/circles_provider.dart';
 import '../../../providers/direct_conversations_provider.dart';
 import '../../../providers/direct_messages_provider.dart';
+import '../../../providers/deleted_conversations_provider.dart';
 
 import '../chat/chat_screen.dart';
 import '../chat/direct_chat_screen.dart';
@@ -42,8 +43,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
       final authProvider = context.read<AuthProvider>();
       final circlesProvider = context.read<CirclesProvider>();
-      final directConversationsProvider =
-          context.read<DirectConversationsProvider>();
+      final directConversationsProvider = context
+          .read<DirectConversationsProvider>();
 
       circlesProvider.loadCircles();
 
@@ -63,9 +64,9 @@ class _HomeScreenState extends State<HomeScreen> {
         context.read<CirclesProvider>().refreshCirclesSilently();
 
         if (currentUserId != null) {
-          context.read<DirectConversationsProvider>().refreshConversationsSilently(
-                currentUserId: currentUserId,
-              );
+          context
+              .read<DirectConversationsProvider>()
+              .refreshConversationsSilently(currentUserId: currentUserId);
         }
       });
     });
@@ -92,8 +93,8 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _refreshHome() async {
     final authProvider = context.read<AuthProvider>();
     final circlesProvider = context.read<CirclesProvider>();
-    final directConversationsProvider =
-        context.read<DirectConversationsProvider>();
+    final directConversationsProvider = context
+        .read<DirectConversationsProvider>();
 
     await circlesProvider.loadCircles();
 
@@ -149,24 +150,27 @@ class _HomeScreenState extends State<HomeScreen> {
   List<_InboxItem> _buildInboxItems({
     required DirectConversationsProvider directConversationsProvider,
     required CirclesProvider circlesProvider,
+    required DeletedConversationsProvider deletedProvider,
     required int? currentUserId,
   }) {
     final items = <_InboxItem>[];
 
-    for (final conversation in directConversationsProvider.conversations) {
+    for (final conversation in directConversationsProvider.conversations.where(
+      (c) => !deletedProvider.isDirectConversationDeleted(c.id),
+    )) {
       final otherUser = conversation.otherUser;
 
       final name =
           (otherUser.displayName != null &&
-                  otherUser.displayName!.trim().isNotEmpty)
-              ? otherUser.displayName!
-              : otherUser.username;
+              otherUser.displayName!.trim().isNotEmpty)
+          ? otherUser.displayName!
+          : otherUser.username;
 
       final preview = conversation.lastMessage?.body?.trim().isNotEmpty == true
           ? conversation.lastMessage!.body!
           : conversation.lastMessage?.mediaUrl != null
-              ? 'Sent an attachment'
-              : 'Start your conversation';
+          ? 'Sent an attachment'
+          : 'Start your conversation';
 
       final isUnread = currentUserId == null
           ? false
@@ -206,11 +210,13 @@ class _HomeScreenState extends State<HomeScreen> {
       );
     }
 
-    for (final circle in circlesProvider.circles) {
+    for (final circle in circlesProvider.circles.where(
+      (c) => !deletedProvider.isCircleDeleted(c.id),
+    )) {
       final preview =
           (circle.description != null && circle.description!.trim().isNotEmpty)
-              ? circle.description!
-              : 'Circle conversation';
+          ? circle.description!
+          : 'Circle conversation';
 
       items.add(
         _InboxItem(
@@ -239,20 +245,22 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     final authProvider = context.watch<AuthProvider>();
     final circlesProvider = context.watch<CirclesProvider>();
-    final directConversationsProvider =
-        context.watch<DirectConversationsProvider>();
+    final deletedProvider = context.watch<DeletedConversationsProvider>();
+    final directConversationsProvider = context
+        .watch<DirectConversationsProvider>();
 
     final user = authProvider.user;
     final displayName =
         (user?.displayName != null && user!.displayName!.trim().isNotEmpty)
-            ? user.displayName!.trim()
-            : (user?.username ?? 'User');
+        ? user.displayName!.trim()
+        : (user?.username ?? 'User');
 
     final currentUserId = user?.id;
 
     final inboxItems = _buildInboxItems(
       directConversationsProvider: directConversationsProvider,
       circlesProvider: circlesProvider,
+      deletedProvider: deletedProvider,
       currentUserId: currentUserId,
     );
 

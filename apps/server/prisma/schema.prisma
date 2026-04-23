@@ -92,8 +92,13 @@ model DirectConversation {
   userOneLastReadAt DateTime?
   userTwoLastReadAt DateTime?
 
+  // soft delete
   userOneDeletedAt DateTime?
   userTwoDeletedAt DateTime?
+
+  // permanently delete after 30 days
+  userOnePurgedAt DateTime?
+  userTwoPurgedAt DateTime?
 
   userOne User @relation("DirectConversationUserOne", fields: [userOneId], references: [id], onDelete: Cascade)
   userTwo User @relation("DirectConversationUserTwo", fields: [userTwoId], references: [id], onDelete: Cascade)
@@ -103,6 +108,10 @@ model DirectConversation {
   @@unique([userOneId, userTwoId])
   @@index([userOneId])
   @@index([userTwoId])
+  @@index([userOneDeletedAt])
+  @@index([userTwoDeletedAt])
+  @@index([userOnePurgedAt])
+  @@index([userTwoPurgedAt])
   @@index([lastMessageAt])
 }
 
@@ -153,13 +162,19 @@ model CircleMember {
   role     MemberRole @default(MEMBER)
   joinedAt DateTime   @default(now())
 
+  // soft delete per member
   chatDeletedAt DateTime?
+
+  purgedAt DateTime?
 
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
   circle Circle @relation(fields: [circleId], references: [id], onDelete: Cascade)
 
   @@unique([userId, circleId])
+  @@index([userId])
   @@index([circleId, role])
+  @@index([chatDeletedAt])
+  @@index([purgedAt])
 }
 
 // ============================================

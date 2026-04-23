@@ -8,6 +8,7 @@ import { MessagesModule } from './messages/messages.module';
 import { UploadsModule } from './uploads/uploads.module';
 import { LinksModule } from './links/links.module';
 import { DirectMessagesModule } from './direct-messages/direct-messages.module';
+import { ScheduleModule } from '@nestjs/schedule'
 
 @Module({
     imports: [
@@ -15,6 +16,7 @@ import { DirectMessagesModule } from './direct-messages/direct-messages.module';
             isGlobal: true,
         }),
         PrismaModule,
+        ScheduleModule.forRoot(),
         AuthModule,
         UsersModule,
         CirclesModule,
