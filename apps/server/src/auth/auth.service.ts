@@ -1,23 +1,24 @@
-import { Injectable, ConflictException, UnauthorizedException } from '@nestjs/common';
+import {
+    Injectable,
+    ConflictException,
+    UnauthorizedException,
+} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../prisma/prisma.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
-import * as bcrypt from 'bcrypt';
+import * as argon2 from 'argon2';
 import { ConfigService } from '@nestjs/config';
-
-// type AuthInput = { username: string; password: string; email: string;};
-// type SignInData =
 
 @Injectable()
 export class AuthService {
     constructor(
         private prisma: PrismaService,
         private jwtService: JwtService,
-        private config: ConfigService
+        private config: ConfigService,
     ) { }
 
-    async register(dto: RegisterDto) {
+    async register(dto: RegisterDto, userAgent?: string, ipAddress?: string) {
         const existingUser = await this.prisma.user.findFirst({
             where: {
                 OR: [{ email: dto.email }, { username: dto.username }],
@@ -26,15 +27,15 @@ export class AuthService {
 
         if (existingUser) {
             if (existingUser.email === dto.email) {
-                throw new ConflictException("Email already in use");
+                throw new ConflictException('Email already in use');
             }
             throw new ConflictException('Username already taken');
         }
 
-        // Hash Password
-        const passwordHash = await bcrypt.hash(dto.password, 10);
+        const passwordHash = await argon2.hash(dto.password, {
+            type: argon2.argon2id,
+        });
 
-        // Create user
         const user = await this.prisma.user.create({
             data: {
                 email: dto.email,
@@ -52,8 +53,11 @@ export class AuthService {
             },
         });
 
-        // Generate tokens
-        const tokens = await this.generateTokens(user.id);
+        const tokens = await this.generateTokens(
+            user.id,
+            userAgent ?? null,
+            ipAddress ?? null,
+        );
 
         return {
             user,
@@ -61,11 +65,14 @@ export class AuthService {
         };
     }
 
-    async login(dto: LoginDto) {
-        // Find user by email or username
+    async login(dto: LoginDto, userAgent?: string, ipAddress?: string) {
         const user = await this.prisma.user.findFirst({
             where: {
-                OR: [{ email: dto.usernameOrEmail }, { username: dto.usernameOrEmail }],
+                OR: [
+                    { email: dto.usernameOrEmail },
+                    { username: dto.usernameOrEmail },
+                ],
+                deletedAt: null,
             },
         });
 
@@ -73,15 +80,17 @@ export class AuthService {
             throw new UnauthorizedException('Invalid credentials');
         }
 
-        // Verify password
-        const passwordValid = await bcrypt.compare(dto.password, user.passwordHash);
+        const passwordValid = await argon2.verify(user.passwordHash, dto.password);
 
         if (!passwordValid) {
             throw new UnauthorizedException('Invalid credentials');
         }
 
-        // Generate tokens
-        const tokens = await this.generateTokens(user.id);
+        const tokens = await this.generateTokens(
+            user.id,
+            userAgent ?? null,
+            ipAddress ?? null,
+        );
 
         return {
             user: {
@@ -96,73 +105,223 @@ export class AuthService {
         };
     }
 
-    async refreshTokens(refreshToken: string) {
+    async refreshTokens(
+        refreshToken: string,
+        userAgent?: string,
+        ipAddress?: string,
+    ) {
         try {
-            // Verify the refresh token
             const payload = this.jwtService.verify(refreshToken, {
-                secret: this.config.get<string>('JWT_SECRET')!,
+                secret: this.config.get<string>('JWT_REFRESH_SECRET')!,
+            }) as { sub: number; sessionId: number };
+
+            const session = await this.prisma.session.findFirst({
+                where: {
+                    id: payload.sessionId,
+                    userId: payload.sub,
+                    revokedAt: null,
+                    expiresAt: { gt: new Date() },
+                },
             });
 
-            // Checks if the token exists in database
-            const storedToken = await this.prisma.refreshToken.findUnique({
-                where: { token: refreshToken },
-            });
-
-            if (!storedToken) {
+            if (!session) {
                 throw new UnauthorizedException('Invalid refresh token');
             }
 
-            // Generate new tokens
-            const tokens = await this.generateTokens(payload.sub);
+            const valid = await argon2.verify(session.refreshTokenHash, refreshToken);
+            if (!valid) {
+                await this.prisma.session.update({
+                    where: { id: session.id },
+                    data: { revokedAt: new Date() },
+                });
+                throw new UnauthorizedException('Invalid refresh token');
+            }
 
-            // Delete old refresh token
-            await this.prisma.refreshToken.delete({
-                where: { token: refreshToken },
+            const user = await this.prisma.user.findUnique({
+                where: { id: payload.sub },
+                select: { id: true, email: true, username: true },
             });
 
-            return tokens;
-        } catch (error) {
+            if (!user) {
+                throw new UnauthorizedException('Invalid refresh token');
+            }
+
+            const newRefreshExpiresAt = this.computeExpiryDate(
+                this.config.get<string>('JWT_REFRESH_TTL') ?? '30d',
+            );
+
+            const newAccessToken = this.jwtService.sign(
+                {
+                    sub: user.id,
+                    email: user.email,
+                    username: user.username,
+                    sessionId: session.id,
+                },
+                {
+                    secret: this.config.get<string>('JWT_ACCESS_SECRET')!,
+                    expiresIn: this.config.get<string>('JWT_ACCESS_TTL')!,
+                } as any,
+            );
+
+            const newRefreshToken = this.jwtService.sign(
+                {
+                    sub: user.id,
+                    sessionId: session.id,
+                },
+                {
+                    secret: this.config.get<string>('JWT_REFRESH_SECRET')!,
+                    expiresIn: this.config.get<string>('JWT_REFRESH_TTL')!,
+                } as any,
+            );
+
+            const newRefreshTokenHash = await argon2.hash(newRefreshToken, {
+                type: argon2.argon2id,
+            });
+
+            await this.prisma.session.update({
+                where: { id: session.id },
+                data: {
+                    refreshTokenHash: newRefreshTokenHash,
+                    userAgent: userAgent ?? session.userAgent,
+                    ipAddress: ipAddress ?? session.ipAddress,
+                    lastUsedAt: new Date(),
+                    expiresAt: newRefreshExpiresAt,
+                },
+            });
+
+            return {
+                accessToken: newAccessToken,
+                refreshToken: newRefreshToken,
+            };
+        } catch {
             throw new UnauthorizedException('Invalid refresh token');
         }
     }
 
     async logout(refreshToken: string) {
-        await this.prisma.refreshToken.deleteMany({
-            where: { token: refreshToken },
+        try {
+            const payload = this.jwtService.verify(refreshToken, {
+                secret: this.config.get<string>('JWT_REFRESH_SECRET')!,
+            }) as { sessionId: number };
+
+            await this.prisma.session.updateMany({
+                where: {
+                    id: payload.sessionId,
+                    revokedAt: null,
+                },
+                data: {
+                    revokedAt: new Date(),
+                },
+            });
+        } catch {
+            throw new UnauthorizedException('Invalid refresh token');
+        }
+    }
+
+    async logoutAll(userId: number) {
+        await this.prisma.session.updateMany({
+            where: {
+                userId,
+                revokedAt: null,
+            },
+            data: {
+                revokedAt: new Date(),
+            },
         });
     }
 
-    private async generateTokens(userId: number) {
-        // Get user details for token payload 
+    async getSessions(userId: number) {
+        return this.prisma.session.findMany({
+            where: {
+                userId,
+                revokedAt: null,
+                expiresAt: { gt: new Date() },
+            },
+            orderBy: { lastUsedAt: 'desc' },
+            select: {
+                id: true,
+                userAgent: true,
+                ipAddress: true,
+                createdAt: true,
+                lastUsedAt: true,
+                expiresAt: true,
+            },
+        });
+    }
+
+    async revokeSession(userId: number, sessionId: number) {
+        await this.prisma.session.updateMany({
+            where: {
+                id: sessionId,
+                userId,
+                revokedAt: null,
+            },
+            data: {
+                revokedAt: new Date(),
+            },
+        });
+    }
+
+    private async generateTokens(
+        userId: number,
+        userAgent: string | null,
+        ipAddress: string | null,
+    ) {
         const user = await this.prisma.user.findUnique({
             where: { id: userId },
-            select: { id: true, email: true, username: true }
-        })
+            select: { id: true, email: true, username: true },
+        });
 
-        const payload = {
-            sub: userId,
-            email: user!.email,
-            username: user!.username,
-        };
-        const secret = this.config.get<string>('JWT_SECRET')!;
+        if (!user) {
+            throw new UnauthorizedException('User not found');
+        }
 
-        const accessToken = this.jwtService.sign(payload, {
-            secret,
-            expiresIn: this.config.get<string>('JWT_ACCESS_TTL')!,
-        } as any);
+        const refreshExpiresAt = this.computeExpiryDate(
+            this.config.get<string>('JWT_REFRESH_TTL') ?? '30d',
+        );
 
-        const refreshToken = this.jwtService.sign(payload, {
-            secret,
-            expiresIn: this.config.get<string>('JWT_REFRESH_TTL')!,
-        } as any);
-
-        // Stores refresh token in database
-        const decoded = this.jwtService.decode(refreshToken) as any;
-        await this.prisma.refreshToken.create({
+        const session = await this.prisma.session.create({
             data: {
-                token: refreshToken,
                 userId,
-                expiresAt: new Date(decoded.exp * 1000),
+                refreshTokenHash: 'placeholder',
+                userAgent,
+                ipAddress,
+                expiresAt: refreshExpiresAt,
+            },
+        });
+
+        const accessToken = this.jwtService.sign(
+            {
+                sub: user.id,
+                email: user.email,
+                username: user.username,
+                sessionId: session.id,
+            },
+            {
+                secret: this.config.get<string>('JWT_ACCESS_SECRET')!,
+                expiresIn: this.config.get<string>('JWT_ACCESS_TTL')!,
+            } as any,
+        );
+
+        const refreshToken = this.jwtService.sign(
+            {
+                sub: user.id,
+                sessionId: session.id,
+            },
+            {
+                secret: this.config.get<string>('JWT_REFRESH_SECRET')!,
+                expiresIn: this.config.get<string>('JWT_REFRESH_TTL')!,
+            } as any,
+        );
+
+        const refreshTokenHash = await argon2.hash(refreshToken, {
+            type: argon2.argon2id,
+        });
+
+        await this.prisma.session.update({
+            where: { id: session.id },
+            data: {
+                refreshTokenHash,
             },
         });
 
@@ -170,5 +329,26 @@ export class AuthService {
             accessToken,
             refreshToken,
         };
+    }
+
+    private computeExpiryDate(ttl: string) {
+        const now = new Date();
+
+        if (ttl.endsWith('d')) {
+            const days = parseInt(ttl.replace('d', ''), 10);
+            return new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
+        }
+
+        if (ttl.endsWith('h')) {
+            const hours = parseInt(ttl.replace('h', ''), 10);
+            return new Date(now.getTime() + hours * 60 * 60 * 1000);
+        }
+
+        if (ttl.endsWith('m')) {
+            const minutes = parseInt(ttl.replace('m', ''), 10);
+            return new Date(now.getTime() + minutes * 60 * 1000);
+        }
+
+        return new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
     }
 }

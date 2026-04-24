@@ -23,20 +23,25 @@ enum LinkRequestStatus {
 }
 
 model User {
-  id           Int      @id @default(autoincrement())
-  email        String   @unique
-  username     String   @unique
-  displayName  String
-  passwordHash String
-  avatarUrl    String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id                  Int       @id @default(autoincrement())
+  email               String    @unique
+  username            String    @unique
+  displayName         String
+  passwordHash        String
+  avatarUrl           String?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  deletionRequestedAt DateTime?
+  scheduledDeletionAt DateTime?
+  deletedAt           DateTime?
 
   circleMembers CircleMember[]
   messages      Message[]
   refreshTokens RefreshToken[]
   reports       Report[]
   auditLogs     AuditLog[]
+  sessions      Session[]
+  uploads       FileUpload[]
 
   sentLinkRequests     LinkRequest[] @relation("LinkRequestSender")
   receivedLinkRequests LinkRequest[] @relation("LinkRequestReceiver")
@@ -236,4 +241,46 @@ model AuditLog {
   actor User @relation(fields: [actorId], references: [id], onDelete: Cascade)
 
   @@index([action, createdAt])
+}
+
+model Session {
+  id               Int       @id @default(autoincrement())
+  userId           Int
+  refreshTokenHash String
+  userAgent        String?
+  ipAddress        String?
+  createdAt        DateTime  @default(now())
+  lastUsedAt       DateTime  @default(now())
+  expiresAt        DateTime
+  revokedAt        DateTime?
+  replacedById     Int?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, revokedAt])
+  @@index([expiresAt])
+}
+
+enum UploadStatus {
+  PENDING_UPLOAD
+  PENDING_SCAN
+  READY
+  REJECTED
+}
+
+model FileUpload {
+  id           Int          @id @default(autoincrement())
+  uploaderId   Int
+  objectKey    String       @unique
+  originalName String
+  mimeType     String
+  sizeBytes    Int
+  status       UploadStatus @default(PENDING_UPLOAD)
+  createdAt    DateTime     @default(now())
+  scannedAt    DateTime?
+  rejectedAt   DateTime?
+
+  uploader User @relation(fields: [uploaderId], references: [id], onDelete: Cascade)
+
+  @@index([uploaderId, status])
 }

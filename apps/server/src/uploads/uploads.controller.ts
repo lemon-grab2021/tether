@@ -1,4 +1,4 @@
-import { Controller, Post, Body, UseGuards } from '@nestjs/common';
+import { Controller, Post, Body, UseGuards, Req } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { UploadsService } from './uploads.service';
 import { RequestUploadDto } from './dto/request-upload.dto';
@@ -8,9 +8,13 @@ import { RequestUploadDto } from './dto/request-upload.dto';
 export class UploadsController {
     constructor(private uploadsService: UploadsService) { }
 
-    // Request a presigned URL for uploading
     @Post('request')
-    async requestUpload(@Body() dto: RequestUploadDto) {
-        return this.uploadsService.generatePresignedUrl(dto.filename, dto.mimeType, dto.fileSize);
+    async requestUpload(@Req() req: any, @Body() dto: RequestUploadDto) {
+        return this.uploadsService.generatePresignedUrl(
+            req.user.id,
+            dto.filename,
+            dto.mimeType,
+            dto.fileSize,
+        );
     }
 }
