@@ -8,22 +8,22 @@ import { CirclesModule } from '../circles/circles.module';
 import { AuthModule } from '../auth/auth.module';
 
 @Module({
-    imports: [
-        CirclesModule,
-        AuthModule,
-        JwtModule.registerAsync({
-            imports: [ConfigModule],
-            useFactory: async (configService: ConfigService) => ({
-                secret: configService.get<string>('JWT_ACCESS_SECRET'),
-                signOptions: {
-                    expiresIn: configService.get<string>('JWT_ACCESS_TTL', '15m') as any,
-                },
-            }),
-            inject: [ConfigService],
-        }),
-    ],
-    controllers: [MessagesController],
-    providers: [MessagesService, MessagesGateway],
-    exports: [MessagesService],
+  imports: [
+    CirclesModule,
+    AuthModule,
+    JwtModule.registerAsync({
+      imports: [ConfigModule],
+      useFactory: async (configService: ConfigService) => ({
+        secret: configService.get<string>('JWT_ACCESS_SECRET'),
+        signOptions: {
+          expiresIn: configService.get<string>('JWT_ACCESS_TTL', '15m') as any,
+        },
+      }),
+      inject: [ConfigService],
+    }),
+  ],
+  controllers: [MessagesController],
+  providers: [MessagesService, MessagesGateway],
+  exports: [MessagesService],
 })
-export class MessagesModule { }
+export class MessagesModule {}

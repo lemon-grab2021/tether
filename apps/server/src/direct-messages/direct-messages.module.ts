@@ -6,9 +6,9 @@ import { DirectMessagesGateway } from './direct-messages.gateway';
 import { PrismaModule } from '../prisma/prisma.module';
 
 @Module({
-    imports: [PrismaModule, JwtModule],
-    controllers: [DirectMessagesController],
-    providers: [DirectMessagesService, DirectMessagesGateway],
-    exports: [DirectMessagesService],
+  imports: [PrismaModule, JwtModule],
+  controllers: [DirectMessagesController],
+  providers: [DirectMessagesService, DirectMessagesGateway],
+  exports: [DirectMessagesService],
 })
-export class DirectMessagesModule { }
+export class DirectMessagesModule {}

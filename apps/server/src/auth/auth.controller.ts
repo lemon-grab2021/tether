@@ -6,7 +6,6 @@ import {
     HttpCode,
     HttpStatus,
     Param,
-    ParseIntPipe,
     Post,
     Req,
     UseGuards,
@@ -18,6 +17,7 @@ import { LoginDto } from './dto/login.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 
+
 @Controller('auth')
 export class AuthController {
     constructor(private readonly authService: AuthService) { }
@@ -28,7 +28,7 @@ export class AuthController {
         const ipAddress =
             typeof forwarded === 'string'
                 ? forwarded.split(',')[0].trim()
-                : req.ip ?? null;
+                : (req.ip ?? null);
 
         return { userAgent, ipAddress };
     }
@@ -78,10 +78,7 @@ export class AuthController {
 
     @UseGuards(JwtAuthGuard)
     @Delete('sessions/:id')
-    async revokeSession(
-        @Req() req: any,
-        @Param('id', ParseIntPipe) sessionId: number,
-    ) {
+    async revokeSession(@Req() req: any, @Param('id') sessionId: string) {
         return this.authService.revokeSession(req.user.id, sessionId);
     }
 }

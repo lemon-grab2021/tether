@@ -6,15 +6,15 @@ import { RequestUploadDto } from './dto/request-upload.dto';
 @Controller('uploads')
 @UseGuards(JwtAuthGuard)
 export class UploadsController {
-    constructor(private uploadsService: UploadsService) { }
+  constructor(private uploadsService: UploadsService) {}
 
-    @Post('request')
-    async requestUpload(@Req() req: any, @Body() dto: RequestUploadDto) {
-        return this.uploadsService.generatePresignedUrl(
-            req.user.id,
-            dto.filename,
-            dto.mimeType,
-            dto.fileSize,
-        );
-    }
+  @Post('request')
+  async requestUpload(@Req() req: any, @Body() dto: RequestUploadDto) {
+    return this.uploadsService.generatePresignedUrl(
+      req.user.id,
+      dto.filename,
+      dto.mimeType,
+      dto.fileSize,
+    );
+  }
 }

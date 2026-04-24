@@ -16,8 +16,8 @@ import { JwtStrategy } from './strategies/jwt.strategy';
     JwtModule.registerAsync({
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => {
-        const accessTtl =
-          (configService.get<string>('JWT_ACCESS_TTL') ?? '15m') as StringValue;
+        const accessTtl = (configService.get<string>('JWT_ACCESS_TTL') ??
+          '15m') as StringValue;
 
         return {
           secret: configService.get<string>('JWT_ACCESS_SECRET')!,
@@ -33,5 +33,4 @@ import { JwtStrategy } from './strategies/jwt.strategy';
   controllers: [AuthController],
   exports: [AuthService, PassportModule, JwtModule],
 })
-export class AuthModule { }
-
+export class AuthModule {}

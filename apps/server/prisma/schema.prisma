@@ -37,11 +37,10 @@ model User {
 
   circleMembers CircleMember[]
   messages      Message[]
-  refreshTokens RefreshToken[]
   reports       Report[]
   auditLogs     AuditLog[]
-  sessions      Session[]
   uploads       FileUpload[]
+  session       Session[]
 
   sentLinkRequests     LinkRequest[] @relation("LinkRequestSender")
   receivedLinkRequests LinkRequest[] @relation("LinkRequestReceiver")
@@ -71,15 +70,23 @@ model LinkRequest {
 }
 
 // ============================================
-// REFRESH TOKENS
+// SESSION
 // ============================================
-model RefreshToken {
-  id        Int      @id @default(autoincrement())
-  token     String   @unique
-  userId    Int
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  expiresAt DateTime
-  createdAt DateTime @default(now())
+model Session {
+  id               String    @id @default(cuid())
+  userId           Int
+  refreshTokenHash String
+  userAgent        String?
+  ipAddress        String?
+  createdAt        DateTime  @default(now())
+  lastUsedAt       DateTime  @default(now())
+  expiresAt        DateTime
+  revokedAt        DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, revokedAt])
+  @@index([expiresAt])
 }
 
 // ============================================
@@ -231,34 +238,19 @@ enum ReportStatus {
 }
 
 model AuditLog {
-  id        Int      @id @default(autoincrement())
-  action    String // e.g., "MESSAGE_DELETED", "USER_BANNED"
-  actorId   Int
-  targetId  String? // Could be userId, messageId, etc.
-  metadata  Json?
-  createdAt DateTime @default(now())
+  id         Int      @id @default(autoincrement())
+  userId     Int?
+  action     String
+  entityType String
+  entityId   String?
+  metadata   Json?
+  createdAt  DateTime @default(now())
 
-  actor User @relation(fields: [actorId], references: [id], onDelete: Cascade)
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
 
-  @@index([action, createdAt])
-}
-
-model Session {
-  id               Int       @id @default(autoincrement())
-  userId           Int
-  refreshTokenHash String
-  userAgent        String?
-  ipAddress        String?
-  createdAt        DateTime  @default(now())
-  lastUsedAt       DateTime  @default(now())
-  expiresAt        DateTime
-  revokedAt        DateTime?
-  replacedById     Int?
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId, revokedAt])
-  @@index([expiresAt])
+  @@index([userId])
+  @@index([action])
+  @@index([entityType])
 }
 
 enum UploadStatus {

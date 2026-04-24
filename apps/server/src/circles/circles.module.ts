@@ -4,9 +4,9 @@ import { CirclesService } from './circles.service';
 import { AuthModule } from '../auth/auth.module';
 
 @Module({
-    imports: [AuthModule],
-    controllers: [CirclesController],
-    providers: [CirclesService],
-    exports: [CirclesService],
+  imports: [AuthModule],
+  controllers: [CirclesController],
+  providers: [CirclesService],
+  exports: [CirclesService],
 })
-export class CirclesModule { }
+export class CirclesModule {}

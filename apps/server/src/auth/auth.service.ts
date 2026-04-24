@@ -9,6 +9,7 @@ import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import * as argon2 from 'argon2';
 import { ConfigService } from '@nestjs/config';
+import { AuditLogService } from 'src/audit-log/audit-log.service';
 
 @Injectable()
 export class AuthService {
@@ -16,6 +17,7 @@ export class AuthService {
         private prisma: PrismaService,
         private jwtService: JwtService,
         private config: ConfigService,
+        private auditLogService: AuditLogService,
     ) { }
 
     async register(dto: RegisterDto, userAgent?: string, ipAddress?: string) {
@@ -53,6 +55,13 @@ export class AuthService {
             },
         });
 
+        await this.auditLogService.log({
+            userId: user.id,
+            action: 'USER_REGISTERED',
+            entityType: 'User',
+            entityId: user.id.toString(),
+        });
+
         const tokens = await this.generateTokens(
             user.id,
             userAgent ?? null,
@@ -68,15 +77,22 @@ export class AuthService {
     async login(dto: LoginDto, userAgent?: string, ipAddress?: string) {
         const user = await this.prisma.user.findFirst({
             where: {
-                OR: [
-                    { email: dto.usernameOrEmail },
-                    { username: dto.usernameOrEmail },
-                ],
+                OR: [{ email: dto.usernameOrEmail }, { username: dto.usernameOrEmail }],
                 deletedAt: null,
             },
         });
 
-        if (!user) {
+        // log failed login attempts
+        if (!user || !(await argon2.verify(user.passwordHash, dto.password))) {
+            await this.auditLogService.log({
+                userId: user?.id,
+                action: 'LOGIN_FAILED',
+                entityType: 'User',
+                metadata: {
+                    usernameOrEmail: dto.usernameOrEmail,
+                },
+            });
+
             throw new UnauthorizedException('Invalid credentials');
         }
 
@@ -85,6 +101,17 @@ export class AuthService {
         if (!passwordValid) {
             throw new UnauthorizedException('Invalid credentials');
         }
+
+        await this.auditLogService.log({
+            userId: user.id,
+            action: 'USER_LOGIN',
+            entityType: 'User',
+            entityId: user.id.toString(),
+            metadata: {
+                ipAddress,
+                userAgent,
+            },
+        });
 
         const tokens = await this.generateTokens(
             user.id,
@@ -113,7 +140,7 @@ export class AuthService {
         try {
             const payload = this.jwtService.verify(refreshToken, {
                 secret: this.config.get<string>('JWT_REFRESH_SECRET')!,
-            }) as { sub: number; sessionId: number };
+            });
 
             const session = await this.prisma.session.findFirst({
                 where: {
@@ -198,24 +225,18 @@ export class AuthService {
         }
     }
 
-    async logout(refreshToken: string) {
-        try {
-            const payload = this.jwtService.verify(refreshToken, {
-                secret: this.config.get<string>('JWT_REFRESH_SECRET')!,
-            }) as { sessionId: number };
+    async logout(sessionId: string, userId: number) {
+        await this.prisma.session.update({
+            where: { id: sessionId },
+            data: { revokedAt: new Date() },
+        });
 
-            await this.prisma.session.updateMany({
-                where: {
-                    id: payload.sessionId,
-                    revokedAt: null,
-                },
-                data: {
-                    revokedAt: new Date(),
-                },
-            });
-        } catch {
-            throw new UnauthorizedException('Invalid refresh token');
-        }
+        await this.auditLogService.log({
+            userId,
+            action: 'USER_LOGOUT',
+            entityType: 'Session',
+            entityId: sessionId,
+        });
     }
 
     async logoutAll(userId: number) {
@@ -249,7 +270,7 @@ export class AuthService {
         });
     }
 
-    async revokeSession(userId: number, sessionId: number) {
+    async revokeSession(userId: number, sessionId: string) {
         await this.prisma.session.updateMany({
             where: {
                 id: sessionId,
@@ -350,5 +371,23 @@ export class AuthService {
         }
 
         return new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+    }
+
+    async log(params: {
+        userId?: number;
+        action: string;
+        entityType: string;
+        entityId?: string | number;
+        metadata?: any;
+    }) {
+        return this.prisma.auditLog.create({
+            data: {
+                userId: params.userId,
+                action: params.action,
+                entityType: params.entityType,
+                entityId: params.entityId?.toString(), // ✅ normalize here
+                metadata: params.metadata,
+            },
+        });
     }
 }
