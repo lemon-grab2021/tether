@@ -2,46 +2,34 @@ import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { ConfigService } from '@nestjs/config';
-import { PrismaService } from '../../prisma/prisma.service';
+
+export type JwtRequestUser = {
+    id: number;
+    email: string;
+    username: string;
+    sessionId?: number;
+};
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
-    constructor(
-        private configService: ConfigService,
-        private prisma: PrismaService,
-    ) {
-        const secret = configService.get<string>('JWT_SECRET');
-
-        if (!secret) {
-            throw new Error('JWT_SECRET is not defined in environment variables');
-        }
-
+    constructor(private readonly config: ConfigService) {
         super({
             jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
+            secretOrKey: config.get<string>('JWT_ACCESS_SECRET')!,
             ignoreExpiration: false,
-            secretOrKey: secret,
         });
     }
 
-    async validate(payload: any) {
-        // payload contains: { sub: userId, email: user.email }
-        const user = await this.prisma.user.findUnique({
-            where: { id: payload.sub },
-            select: {
-                id: true,
-                email: true,
-                username: true,
-                displayName: true,
-                avatarUrl: true,
-                createdAt: true,
-                updatedAt: true,
-            },
-        });
-
-        if (!user) {
-            throw new UnauthorizedException('User not found');
+    async validate(payload: any): Promise<JwtRequestUser> {
+        if (!payload?.sub) {
+            throw new UnauthorizedException('Invalid token payload');
         }
 
-        return user;
+        return {
+            id: payload.sub,
+            email: payload.email,
+            username: payload.username,
+            sessionId: payload.sessionId,
+        };
     }
 }

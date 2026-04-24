@@ -70,7 +70,7 @@ export class DirectMessagesGateway
             }
 
             const payload = this.jwtService.verify(token, {
-                secret: this.config.get<string>('JWT_SECRET'),
+                secret: this.config.get<string>('JWT_ACCESS_SECRET'),
             });
 
             client.user = {
@@ -78,7 +78,9 @@ export class DirectMessagesGateway
                 email: payload.email,
                 username: payload.username,
             };
-        } catch {
+            console.log(`Direct socket connected: ${client.id} (${client.user.username})`);
+        } catch (error) {
+            console.error('Direct socket auth error:', error);
             client.disconnect();
         }
     }
@@ -94,7 +96,14 @@ export class DirectMessagesGateway
         @ConnectedSocket() client: AuthenticatedSocket,
         @MessageBody() data: { conversationId: number },
     ) {
+        console.log('direct:join received', {
+            socketId: client.id,
+            userId: client.user?.id,
+            conversationId: data?.conversationId,
+        });
+
         if (!client.user) {
+            console.log('direct:join failed: no authenticated user');
             return { error: 'Not authenticated' };
         }
 
@@ -103,12 +112,23 @@ export class DirectMessagesGateway
             client.user.id,
         );
 
+        console.log('direct:join participant check', {
+            userId: client.user.id,
+            conversationId: data.conversationId,
+            allowed,
+        });
+
         if (!allowed) {
             return { error: 'Not a participant in this conversation' };
         }
 
         const roomName = this.roomName(data.conversationId);
         await client.join(roomName);
+
+        console.log('direct:join success', {
+            userId: client.user.id,
+            roomName,
+        });
 
         client.emit('direct:joined', { conversationId: data.conversationId });
         return { success: true };
@@ -119,18 +139,38 @@ export class DirectMessagesGateway
         @ConnectedSocket() client: AuthenticatedSocket,
         @MessageBody() dto: SendDirectMessageDto,
     ) {
+        console.log('direct:message:send received', {
+            socketId: client.id,
+            userId: client.user?.id,
+            dto,
+        });
+
         if (!client.user) {
+            console.log('direct:message:send failed: no authenticated user');
             return { error: 'Not authenticated' };
         }
 
-        const message = await this.directMessagesService.sendMessage(
-            client.user.id,
-            dto,
-        );
+        try {
+            const message = await this.directMessagesService.sendMessage(
+                client.user.id,
+                dto,
+            );
 
-        this.broadcastMessageNew(message);
+            console.log('direct:message:send success', {
+                messageId: message.id,
+                conversationId: message.conversationId,
+                senderId: message.senderId,
+            });
 
-        return { success: true, message };
+            this.broadcastMessageNew(message);
+
+            return { success: true, message };
+        } catch (error) {
+            console.error('direct:message:send failed', error);
+            return {
+                error: error instanceof Error ? error.message : 'Send failed',
+            };
+        }
     }
 
     @SubscribeMessage('direct:read')

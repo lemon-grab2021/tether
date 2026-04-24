@@ -1,16 +1,17 @@
 import {
-    Controller,
-    Post,
     Body,
+    Controller,
+    Delete,
+    Get,
     HttpCode,
     HttpStatus,
-    Req,
-    UseGuards,
-    Get,
-    Delete,
     Param,
     ParseIntPipe,
+    Post,
+    Req,
+    UseGuards,
 } from '@nestjs/common';
+
 import { AuthService } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
@@ -19,7 +20,7 @@ import { JwtAuthGuard } from './guards/jwt-auth.guard';
 
 @Controller('auth')
 export class AuthController {
-    constructor(private authService: AuthService) { }
+    constructor(private readonly authService: AuthService) { }
 
     private getRequestMeta(req: any) {
         const userAgent = req.headers['user-agent'] ?? null;
@@ -49,7 +50,11 @@ export class AuthController {
     @HttpCode(HttpStatus.OK)
     async refresh(@Body() dto: RefreshTokenDto, @Req() req: any) {
         const { userAgent, ipAddress } = this.getRequestMeta(req);
-        return this.authService.refreshTokens(dto.refreshToken, userAgent, ipAddress);
+        return this.authService.refreshTokens(
+            dto.refreshToken,
+            userAgent,
+            ipAddress,
+        );
     }
 
     @Post('logout')

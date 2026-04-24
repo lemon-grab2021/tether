@@ -7,6 +7,7 @@ import '../../../providers/circles_provider.dart';
 import '../../../providers/direct_conversations_provider.dart';
 import '../../../providers/direct_messages_provider.dart';
 import '../../../providers/deleted_conversations_provider.dart';
+import '../../../data/models/direct_conversation.dart';
 
 import '../chat/chat_screen.dart';
 import '../chat/direct_chat_screen.dart';
@@ -89,6 +90,41 @@ class _HomeScreenState extends State<HomeScreen> {
   void _openSearchTab() {
     widget.onOpenSearchTab?.call();
   }
+
+  Future<void> _openDirectConversation(DirectConversation conversation) async {
+  final authProvider = context.read<AuthProvider>();
+  final directConversationsProvider = context.read<DirectConversationsProvider>();
+
+  final currentUserId = authProvider.user?.id;
+  if (currentUserId == null) return;
+
+  await directConversationsProvider.loadConversations(
+    currentUserId: currentUserId,
+  );
+
+  if (!mounted) return;
+
+  final freshConversation = directConversationsProvider.conversations.firstWhere(
+    (c) => c.id == conversation.id,
+    orElse: () => conversation,
+  );
+
+  await Navigator.push(
+    context,
+    MaterialPageRoute(
+      builder: (_) => ChangeNotifierProvider(
+        create: (_) => DirectMessagesProvider(),
+        child: DirectChatScreen(conversation: freshConversation),
+      ),
+    ),
+  );
+
+  if (!mounted) return;
+
+  await directConversationsProvider.loadConversations(
+    currentUserId: currentUserId,
+  );
+}
 
   Future<void> _refreshHome() async {
     final authProvider = context.read<AuthProvider>();
@@ -195,17 +231,7 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           badgeCount: isUnread ? 1 : null,
           subtitleBold: isUnread,
-          onTap: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => ChangeNotifierProvider(
-                  create: (_) => DirectMessagesProvider(),
-                  child: DirectChatScreen(conversation: conversation),
-                ),
-              ),
-            );
-          },
+          onTap: () => _openDirectConversation(conversation),
         ),
       );
     }

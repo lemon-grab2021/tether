@@ -117,7 +117,7 @@ export class MessagesGateway implements OnGatewayConnection, OnGatewayDisconnect
 
             // Verify JWT
             const payload = this.jwtService.verify(token, {
-                secret: this.config.get<string>('JWT_SECRET'),
+                secret: this.config.get<string>('JWT_ACCESS_SECRET'),
             });
 
             const userId = payload.sub;
@@ -128,7 +128,7 @@ export class MessagesGateway implements OnGatewayConnection, OnGatewayDisconnect
                 username: payload.username,
             }
 
-            console.log('User ${userId} connected');
+            console.log(`User ${userId} connected`);
 
             // Track user's sockets
             if (!this.userSockets.has(userId)) {

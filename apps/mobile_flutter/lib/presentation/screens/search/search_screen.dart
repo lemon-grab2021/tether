@@ -724,21 +724,10 @@ class _SearchScreenState extends State<SearchScreen> {
                                       dateLabel: _messageDateTimeLabel(
                                         result.createdAt,
                                       ),
-                                      onTap: () {
+                                      onTap: () async {
                                         _commitRecentSearch(_query);
-                                        Navigator.push(
-                                          context,
-                                          MaterialPageRoute(
-                                            builder: (_) =>
-                                                ChangeNotifierProvider(
-                                                  create: (_) =>
-                                                      DirectMessagesProvider(),
-                                                  child: DirectChatScreen(
-                                                    conversation:
-                                                        result.conversation,
-                                                  ),
-                                                ),
-                                          ),
+                                        await _openConversationFromSearch(
+                                          result.conversation,
                                         );
                                       },
                                     ),

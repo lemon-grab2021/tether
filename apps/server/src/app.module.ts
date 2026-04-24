@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { ConfigModule } from '@nestjs/config';
+import { ScheduleModule } from '@nestjs/schedule';
+
 import { PrismaModule } from './prisma/prisma.module';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
@@ -9,7 +11,8 @@ import { MessagesModule } from './messages/messages.module';
 import { UploadsModule } from './uploads/uploads.module';
 import { LinksModule } from './links/links.module';
 import { DirectMessagesModule } from './direct-messages/direct-messages.module';
-import { ScheduleModule } from '@nestjs/schedule'
+import { ConversationCleanupService } from './conversation-cleanup.service';
+
 
 @Module({
     imports: [
@@ -33,6 +36,6 @@ import { ScheduleModule } from '@nestjs/schedule'
         UploadsModule,
     ],
     controllers: [],
-    providers: [],
+    providers: [ConversationCleanupService],
 })
 export class AppModule { }

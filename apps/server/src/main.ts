@@ -8,13 +8,23 @@ async function bootstrap() {
 
   app.use(helmet());
 
-  const allowedOrigins =
-    process.env.CORS_ORIGINS?.split(',').map((v) => v.trim()) ?? [
-      'http://localhost:5173',
-    ];
-
   app.enableCors({
-    origin: allowedOrigins,
+    origin: (origin, callback) => {
+      // allow non-browser tools like Postman / mobile clients
+      if (!origin) {
+        return callback(null, true);
+      }
+
+      const allowed =
+        /^http:\/\/localhost:\d+$/.test(origin) ||
+        /^http:\/\/127\.0\.0\.1:\d+$/.test(origin);
+
+      if (allowed) {
+        return callback(null, true);
+      }
+
+      return callback(new Error(`Origin not allowed by CORS: ${origin}`), false);
+    },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-CSRF-Token'],

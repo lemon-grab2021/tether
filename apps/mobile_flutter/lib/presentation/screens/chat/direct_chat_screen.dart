@@ -42,17 +42,40 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
 
       directMessagesProvider = context.read<DirectMessagesProvider>();
 
-      await directMessagesProvider!.loadMessages(widget.conversation.id);
-      await directMessagesProvider!.loadConversation(
-        conversationId: widget.conversation.id,
-        currentUserId: currentUserId,
-      );
-      await directMessagesProvider!.markConversationAsRead(
-        widget.conversation.id,
-      );
-      await directMessagesProvider!.connectToConversation(
-        conversationId: widget.conversation.id,
-        currentUserId: currentUserId,
+      try {
+        await directMessagesProvider!.loadMessages(widget.conversation.id);
+      } catch (_) {}
+
+      try {
+        await directMessagesProvider!.loadConversation(
+          conversationId: widget.conversation.id,
+          currentUserId: currentUserId,
+        );
+      } catch (_) {}
+
+      try {
+        await directMessagesProvider!.connectToConversation(
+          conversationId: widget.conversation.id,
+          currentUserId: currentUserId,
+        );
+      } catch (e) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Failed to connect to conversation: ${e.toString().replaceAll('Exception: ', '')}',
+            ),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
+
+      // Do this after socket connection starts, and do not block on it
+      unawaited(
+        directMessagesProvider!.markConversationAsReadSilently(
+          widget.conversation.id,
+        ),
       );
 
       _startPolling(currentUserId);
@@ -120,7 +143,7 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
     }
   }
 
-  void _sendMessage() {
+  Future<void> _sendMessage() async {
     final provider = context.read<DirectMessagesProvider>();
     final text = _messageController.text.trim();
     if (text.isEmpty) return;
@@ -136,7 +159,10 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
     }
 
     try {
-      provider.sendMessage(conversationId: widget.conversation.id, body: text);
+      await provider.sendMessage(
+        conversationId: widget.conversation.id,
+        body: text,
+      );
 
       provider.stopTyping(widget.conversation.id);
       _sentTyping = false;
@@ -145,6 +171,7 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
       _messageController.clear();
       Future.delayed(const Duration(milliseconds: 100), _scrollToBottom);
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(

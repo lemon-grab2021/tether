@@ -605,7 +605,7 @@ class _LinksScreenState extends State<LinksScreen> {
         Widget trailing;
 
         final relationship = result.relationship.toLowerCase().trim();
-        
+
         switch (relationship) {
           case 'link':
           case 'linked':

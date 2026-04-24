@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:socket_io_client/socket_io_client.dart' as IO;
 import '../core/constants/api_constants.dart';
@@ -155,6 +157,11 @@ class DirectMessagesProvider extends ChangeNotifier {
     if (token == null) throw Exception('Not authenticated');
 
     disconnect();
+    _error = null;
+    _isConnected = false;
+    _isJoinedRoom = false;
+    _isOtherUserTyping = false;
+    notifyListeners();
 
     _socket = IO.io(
       ApiConstants.socketUrl,
@@ -166,23 +173,72 @@ class DirectMessagesProvider extends ChangeNotifier {
     );
 
     _socket!.onConnect((_) {
+      print('DM socket connected for conversationId=$conversationId');
       _isConnected = true;
-      _isJoinedRoom = false;
+      _error = null;
       notifyListeners();
 
-      _socket!.emit('direct:join', {'conversationId': conversationId});
+      _socket!.emitWithAck(
+        'direct:join',
+        {'conversationId': conversationId},
+        ack: (data) async {
+          if (data == null) {
+            _error = 'No response when joining conversation';
+            _isJoinedRoom = false;
+            notifyListeners();
+            return;
+          }
+
+          final map = Map<String, dynamic>.from(data as Map);
+
+          if (map['success'] == true) {
+            print('Joined DM room successfully');
+            _isJoinedRoom = true;
+            _error = null;
+            notifyListeners();
+
+            await markConversationAsReadSilently(conversationId);
+            _socket!.emit('direct:read', {'conversationId': conversationId});
+
+            await refreshConversationSilently(
+              conversationId: conversationId,
+              currentUserId: currentUserId,
+            );
+          } else {
+            print('Join failed: ${map['error']}');
+            _isJoinedRoom = false;
+            _error = map['error']?.toString() ?? 'Failed to join conversation';
+            notifyListeners();
+          }
+        },
+      );
+    });
+
+    _socket!.onConnectError((data) {
+      print('DM socket connect error: $data');
+      _isConnected = false;
+      _isJoinedRoom = false;
+      _error = 'Socket connection failed: $data';
+      notifyListeners();
+    });
+
+    _socket!.onError((data) {
+      print('DM socket error: $data');
+      _error = 'Socket error: $data';
+      notifyListeners();
     });
 
     _socket!.on('direct:typing:update', (data) {
       final map = Map<String, dynamic>.from(data as Map);
-      final isTyping = map['isTyping'] == true;
+      // final isTyping = map['isTyping'] == true;
 
-      _isOtherUserTyping = isTyping;
+      _isOtherUserTyping = map['isTyping'] == true;
       notifyListeners();
     });
 
     _socket!.on('direct:joined', (_) async {
       _isJoinedRoom = true;
+      _error = null;
       notifyListeners();
 
       await markConversationAsReadSilently(conversationId);
@@ -231,20 +287,48 @@ class DirectMessagesProvider extends ChangeNotifier {
     _socket!.connect();
   }
 
-  void sendMessage({
+  Future<void> sendMessage({
     required int conversationId,
     String? body,
     String? mediaUrl,
-  }) {
-    if (_socket == null || !_isJoinedRoom) {
+  }) async {
+    if (_socket == null || !_isConnected || !_isJoinedRoom) {
       throw Exception('Not connected to direct conversation');
     }
 
-    _socket!.emit('direct:message:send', {
-      'conversationId': conversationId,
-      'body': body,
-      'mediaUrl': mediaUrl,
-    });
+    final completer = Completer<void>();
+
+    _socket!.emitWithAck(
+      'direct:message:send',
+      {'conversationId': conversationId, 'body': body, 'mediaUrl': mediaUrl},
+      ack: (data) {
+        try {
+          if (data == null) {
+            _error = 'No response from server while sending message';
+            notifyListeners();
+            completer.completeError(Exception(_error));
+            return;
+          }
+
+          final map = Map<String, dynamic>.from(data as Map);
+
+          if (map['success'] != true) {
+            _error = map['error']?.toString() ?? 'Failed to send message';
+            notifyListeners();
+            completer.completeError(Exception(_error));
+            return;
+          }
+
+          _error = null;
+          notifyListeners();
+          completer.complete();
+        } catch (e) {
+          completer.completeError(e);
+        }
+      },
+    );
+
+    return completer.future;
   }
 
   void startTyping(int conversationId) {
@@ -298,8 +382,6 @@ class DirectMessagesProvider extends ChangeNotifier {
       notifyListeners();
     }
   }
-                  
-    
 
   void disconnect() {
     if (_socket != null) {
@@ -311,6 +393,7 @@ class DirectMessagesProvider extends ChangeNotifier {
     _isConnected = false;
     _isJoinedRoom = false;
     _isOtherUserTyping = false;
+    _error = null;
     notifyListeners();
   }
 
