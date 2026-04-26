@@ -320,16 +320,6 @@ export class DirectMessagesService {
       },
     });
 
-    await this.auditLogService.log({
-      userId,
-      action: 'MESSAGE_SENT',
-      entityType: 'DirectMessage',
-      entityId: result.id.toString(),
-      metadata: {
-        conversationId,
-      },
-    });
-
     await this.notificationsService.createNotification({
       userId: recipientId,
       type: 'DIRECT_MESSAGE',

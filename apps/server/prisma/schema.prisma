@@ -46,9 +46,9 @@ model User {
   sentLinkRequests     LinkRequest[] @relation("LinkRequestSender")
   receivedLinkRequests LinkRequest[] @relation("LinkRequestReceiver")
 
-  directConversatioAsSender   DirectConversation[] @relation("DirectConversationUserOne")
-  directConversatioAsReceiver DirectConversation[] @relation("DirectConversationUserTwo")
-  sentDirectMessages          DirectMessage[]      @relation("DirectMessageSender")
+  directConversationAsSender   DirectConversation[] @relation("DirectConversationUserOne")
+  directConversationAsReceiver DirectConversation[] @relation("DirectConversationUserTwo")
+  sentDirectMessages           DirectMessage[]      @relation("DirectMessageSender")
 }
 
 // ============================================

@@ -28,8 +28,7 @@ interface AuthenticatedSocket extends Socket {
   },
 })
 export class DirectMessagesGateway
-  implements OnGatewayConnection, OnGatewayDisconnect
-{
+  implements OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer()
   server!: Server;
 
@@ -37,7 +36,7 @@ export class DirectMessagesGateway
     private readonly directMessagesService: DirectMessagesService,
     private readonly jwtService: JwtService,
     private readonly config: ConfigService,
-  ) {}
+  ) { }
 
   private roomName(conversationId: number) {
     return `direct:${conversationId}`;
@@ -89,9 +88,6 @@ export class DirectMessagesGateway
   }
 
   handleDisconnect(client: AuthenticatedSocket) {
-    console.log(
-      `Direct socket disconnected: ${client.id} (${client.user?.username ?? 'unknown'})`,
-    );
   }
 
   @SubscribeMessage('direct:join')

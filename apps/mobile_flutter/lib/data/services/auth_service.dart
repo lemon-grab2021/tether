@@ -5,7 +5,7 @@ import '../../core/constants/api_constants.dart';
 
 class AuthService {
   final _storage = const FlutterSecureStorage();
-  
+
   // Register
   Future<Map<String, dynamic>> register({
     required String email,
@@ -26,11 +26,11 @@ class AuthService {
 
     if (response.statusCode == 201) {
       final data = jsonDecode(response.body);
-      
+
       // Store tokens
       await _storage.write(key: 'accessToken', value: data['accessToken']);
       await _storage.write(key: 'refreshToken', value: data['refreshToken']);
-      
+
       return data;
     } else {
       final error = jsonDecode(response.body);
@@ -58,11 +58,11 @@ class AuthService {
     if (response.statusCode == 200) {
       final data = jsonDecode(response.body);
       print('Decoded data: $data');
-      
+
       // Store tokens
       await _storage.write(key: 'accessToken', value: data['accessToken']);
       await _storage.write(key: 'refreshToken', value: data['refreshToken']);
-      
+
       return data;
     } else {
       final error = jsonDecode(response.body);
@@ -82,17 +82,18 @@ class AuthService {
 
   // Logout
   Future<void> logout() async {
-    final refreshToken = await getRefreshToken();
-    
-    if (refreshToken != null) {
+    final accessToken = await getAccessToken();
+
+    if (accessToken != null) {
       await http.post(
         Uri.parse(ApiConstants.logout),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'refreshToken': refreshToken}),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $accessToken',
+        },
       );
     }
-    
-    // Clear stored tokens
+
     await _storage.delete(key: 'accessToken');
     await _storage.delete(key: 'refreshToken');
   }

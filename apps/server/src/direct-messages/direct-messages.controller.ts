@@ -116,7 +116,7 @@ export class DirectMessagesController {
   @Get('deleted/list')
   async getDeletedConversations(@Req() req: any) {
     return this.directMessagesService.getDeletedConversationsForUser(
-      req.userId,
+      req.user.Id,
     );
   }
 
@@ -149,7 +149,7 @@ export class DirectMessagesController {
   ) {
     return this.directMessagesService.restoreConversationForUser(
       conversationId,
-      req.userId,
+      req.user.Id,
     );
   }
 }

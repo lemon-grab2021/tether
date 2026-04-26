@@ -10,14 +10,11 @@ import {
   UseGuards,
   Request,
   ParseIntPipe,
-  DefaultValuePipe,
-  BadRequestException,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { MessagesService } from './messages.service';
 import { SendMessageDto } from './dto/send-message.dto';
 import { CircleMemberGuard } from 'src/circles/guards/circle-member.guard';
-import { dot } from 'node:test/reporters';
 import { UpdateMessageDto } from 'src/auth/dto/update-message.dto';
 import { MessagesGateway } from './messages.gateway';
 
@@ -27,7 +24,7 @@ export class MessagesController {
   constructor(
     private readonly messagesService: MessagesService,
     private readonly messagesGateway: MessagesGateway,
-  ) {}
+  ) { }
 
   // Get message history (paginated)
   @Get()

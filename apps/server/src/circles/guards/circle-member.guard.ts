@@ -5,12 +5,10 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { CirclesService } from '../circles.service';
-import { parse } from 'path';
-import { raw } from 'express';
 
 @Injectable()
 export class CircleMemberGuard implements CanActivate {
-  constructor(private circlesService: CirclesService) {}
+  constructor(private circlesService: CirclesService) { }
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest();
