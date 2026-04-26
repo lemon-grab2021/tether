@@ -1,16 +1,19 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:tether/providers/notifications_provider.dart';
 
 import '../../../providers/auth_provider.dart';
 import '../../../providers/circles_provider.dart';
 import '../../../providers/direct_conversations_provider.dart';
 import '../../../providers/direct_messages_provider.dart';
 import '../../../providers/deleted_conversations_provider.dart';
+import '../../widgets/notification_bell.dart';
 
 import '../chat/chat_screen.dart';
 import '../chat/direct_chat_screen.dart';
 
+import '../../widgets/tether_pulse.dart';
 import '../../widgets/app_avatar.dart';
 import '../../widgets/create_circle_dialog.dart';
 import '../../widgets/join_circle_dialog.dart';
@@ -43,10 +46,12 @@ class _HomeScreenState extends State<HomeScreen> {
 
       final authProvider = context.read<AuthProvider>();
       final circlesProvider = context.read<CirclesProvider>();
-      final directConversationsProvider =
-          context.read<DirectConversationsProvider>();
+      final directConversationsProvider = context
+          .read<DirectConversationsProvider>();
+      final notificationsProvider = context.read<NotificationsProvider>();
 
       circlesProvider.loadCircles();
+      notificationsProvider.loadNotifications();
 
       final currentUserId = authProvider.user?.id;
       if (currentUserId != null) {
@@ -62,6 +67,7 @@ class _HomeScreenState extends State<HomeScreen> {
         final currentUserId = authProvider.user?.id;
 
         context.read<CirclesProvider>().refreshCirclesSilently();
+        context.read<NotificationsProvider>().refreshUnreadCount();
 
         if (currentUserId != null) {
           context
@@ -93,10 +99,11 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _refreshHome() async {
     final authProvider = context.read<AuthProvider>();
     final circlesProvider = context.read<CirclesProvider>();
-    final directConversationsProvider =
-        context.read<DirectConversationsProvider>();
+    final directConversationsProvider = context
+        .read<DirectConversationsProvider>();
 
     await circlesProvider.loadCircles();
+    await context.read<NotificationsProvider>().loadNotifications();
 
     final currentUserId = authProvider.user?.id;
     if (currentUserId != null) {
@@ -176,8 +183,8 @@ class _HomeScreenState extends State<HomeScreen> {
       final preview = conversation.lastMessage?.body?.trim().isNotEmpty == true
           ? conversation.lastMessage!.body!
           : conversation.lastMessage?.mediaUrl != null
-              ? 'Sent an attachment'
-              : 'Start your conversation';
+          ? 'Sent an attachment'
+          : 'Start your conversation';
 
       final isUnread = currentUserId == null
           ? false
@@ -185,6 +192,16 @@ class _HomeScreenState extends State<HomeScreen> {
               conversation: conversation,
               currentUserId: currentUserId,
             );
+      final isNewTether = conversation.lastMessage == null;
+
+      final pulseState = TetherPulseHelper.fromActivity(
+        lastActivityAt:
+            conversation.lastMessage?.createdAt ?? conversation.lastMessageAt,
+        hasUnread: isUnread,
+        isNew: isNewTether,
+        createdAt: conversation.createdAt,
+        newTetherWindow: const Duration(days: 3),
+      );
 
       items.add(
         _InboxItem(
@@ -205,6 +222,7 @@ class _HomeScreenState extends State<HomeScreen> {
           subtitleBold: isUnread,
           isTyping: false,
           memberCount: null,
+          pulseState: pulseState,
           onTap: () {
             Navigator.push(
               context,
@@ -225,8 +243,19 @@ class _HomeScreenState extends State<HomeScreen> {
     )) {
       final preview =
           (circle.description != null && circle.description!.trim().isNotEmpty)
-              ? circle.description!
-              : 'Circle conversation';
+          ? circle.description!
+          : 'Circle conversation';
+
+      final memberCount =
+          circle.messageCount?.members ?? circle.members?.length ?? 0;
+
+      final circleMessageCount = circle.messageCount?.messages ?? 0;
+
+      final pulseState = TetherPulseHelper.fromActivity(
+        lastActivityAt: circle.updatedAt,
+        hasUnread: false,
+        isNew: circleMessageCount == 0,
+      );
 
       items.add(
         _InboxItem(
@@ -239,7 +268,8 @@ class _HomeScreenState extends State<HomeScreen> {
           badgeCount: null,
           subtitleBold: false,
           isTyping: false,
-          memberCount: null,
+          memberCount: memberCount,
+          pulseState: pulseState,
           onTap: () {
             Navigator.push(
               context,
@@ -259,14 +289,14 @@ class _HomeScreenState extends State<HomeScreen> {
     final authProvider = context.watch<AuthProvider>();
     final circlesProvider = context.watch<CirclesProvider>();
     final deletedProvider = context.watch<DeletedConversationsProvider>();
-    final directConversationsProvider =
-        context.watch<DirectConversationsProvider>();
+    final directConversationsProvider = context
+        .watch<DirectConversationsProvider>();
 
     final user = authProvider.user;
     final displayName =
         (user?.displayName != null && user!.displayName!.trim().isNotEmpty)
-            ? user.displayName!.trim()
-            : (user?.username ?? 'User');
+        ? user.displayName!.trim()
+        : (user?.username ?? 'User');
 
     final currentUserId = user?.id;
 
@@ -284,11 +314,12 @@ class _HomeScreenState extends State<HomeScreen> {
 
     final isInitialLoading =
         (!directConversationsProvider.hasLoadedOnce &&
-                directConversationsProvider.conversations.isEmpty) &&
-            circlesProvider.isLoading &&
-            circlesProvider.circles.isEmpty;
+            directConversationsProvider.conversations.isEmpty) &&
+        circlesProvider.isLoading &&
+        circlesProvider.circles.isEmpty;
 
-    final hasLoadError = inboxItems.isEmpty &&
+    final hasLoadError =
+        inboxItems.isEmpty &&
         (directConversationsProvider.error != null ||
             circlesProvider.error != null);
 
@@ -349,6 +380,9 @@ class _HomeScreenState extends State<HomeScreen> {
                               title: 'Recent Conversations',
                               countLabel: '${inboxItems.length} active',
                             ),
+                            const SizedBox(height: 10),
+                            const _PulseLegend(),
+                            const SizedBox(height: 14),
                             const SizedBox(height: 14),
                             if (isInitialLoading)
                               const Padding(
@@ -362,7 +396,8 @@ class _HomeScreenState extends State<HomeScreen> {
                             else if (hasLoadError)
                               _MessageEmptyState(
                                 title: 'Could not load messages',
-                                subtitle: directConversationsProvider.error ??
+                                subtitle:
+                                    directConversationsProvider.error ??
                                     circlesProvider.error ??
                                     'Something went wrong.',
                               )
@@ -392,9 +427,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                   },
                                   child: Padding(
                                     padding: const EdgeInsets.only(bottom: 12),
-                                    child: _ConversationCard(
-                                      item: item,
-                                    ),
+                                    child: _ConversationCard(item: item),
                                   ),
                                 );
                               }),
@@ -426,6 +459,7 @@ class _InboxItem {
   final bool subtitleBold;
   final bool isTyping;
   final int? memberCount;
+  final TetherPulseState pulseState;
   final VoidCallback onTap;
 
   const _InboxItem({
@@ -436,6 +470,7 @@ class _InboxItem {
     required this.subtitle,
     required this.timeLabel,
     required this.onTap,
+    required this.pulseState,
     this.badgeCount,
     this.subtitleBold = false,
     this.isTyping = false,
@@ -460,29 +495,19 @@ class _TetherPalette {
   static const LinearGradient heroGradient = LinearGradient(
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
-    colors: [
-      Color(0xFF5D5FEF),
-      Color(0xFF7B61FF),
-      Color(0xFFD76BEF),
-    ],
+    colors: [Color(0xFF5D5FEF), Color(0xFF7B61FF), Color(0xFFD76BEF)],
   );
 
   static const LinearGradient primaryGradient = LinearGradient(
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
-    colors: [
-      Color(0xFF6C5CFF),
-      Color(0xFF7B61FF),
-    ],
+    colors: [Color(0xFF6C5CFF), Color(0xFF7B61FF)],
   );
 
   static const LinearGradient accentGradient = LinearGradient(
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
-    colors: [
-      Color(0xFFD66BEE),
-      Color(0xFFBD5FEA),
-    ],
+    colors: [Color(0xFFD66BEE), Color(0xFFBD5FEA)],
   );
 }
 
@@ -543,10 +568,7 @@ class _BlurOrb extends StatelessWidget {
   final double size;
   final Color color;
 
-  const _BlurOrb({
-    required this.size,
-    required this.color,
-  });
+  const _BlurOrb({required this.size, required this.color});
 
   @override
   Widget build(BuildContext context) {
@@ -556,13 +578,7 @@ class _BlurOrb extends StatelessWidget {
       decoration: BoxDecoration(
         shape: BoxShape.circle,
         color: color,
-        boxShadow: [
-          BoxShadow(
-            color: color,
-            blurRadius: 80,
-            spreadRadius: 30,
-          ),
-        ],
+        boxShadow: [BoxShadow(color: color, blurRadius: 80, spreadRadius: 30)],
       ),
     );
   }
@@ -612,19 +628,11 @@ class _HomeHeader extends StatelessWidget {
             ],
           ),
         ),
-        _HeaderIconButton(
-          icon: Icons.search_rounded,
-          onPressed: onSearch,
-        ),
-        _HeaderIconButton(
-          icon: Icons.notifications_none_rounded,
-          showBadge: hasNotifications,
-          onPressed: onNotifications,
-        ),
-        _HeaderIconButton(
-          icon: Icons.settings_outlined,
-          onPressed: onProfile,
-        ),
+        _HeaderIconButton(icon: Icons.search_rounded, onPressed: onSearch),
+
+        const NotificationBellButton(),
+
+        _HeaderIconButton(icon: Icons.settings_outlined, onPressed: onProfile),
       ],
     );
   }
@@ -686,11 +694,7 @@ class _HeaderIconButton extends StatelessWidget {
         IconButton(
           onPressed: onPressed,
           splashRadius: 22,
-          icon: Icon(
-            icon,
-            color: _TetherPalette.muted,
-            size: 23,
-          ),
+          icon: Icon(icon, color: _TetherPalette.muted, size: 23),
         ),
         if (showBadge)
           Positioned(
@@ -837,9 +841,7 @@ class _WelcomeHeroCard extends StatelessWidget {
                   decoration: BoxDecoration(
                     color: Colors.white.withOpacity(0.20),
                     borderRadius: BorderRadius.circular(22),
-                    border: Border.all(
-                      color: Colors.white.withOpacity(0.18),
-                    ),
+                    border: Border.all(color: Colors.white.withOpacity(0.18)),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
@@ -873,10 +875,7 @@ class _HeroOrb extends StatelessWidget {
   final double size;
   final double opacity;
 
-  const _HeroOrb({
-    required this.size,
-    required this.opacity,
-  });
+  const _HeroOrb({required this.size, required this.opacity});
 
   @override
   Widget build(BuildContext context) {
@@ -1058,10 +1057,7 @@ class _SectionHeader extends StatelessWidget {
   final String title;
   final String countLabel;
 
-  const _SectionHeader({
-    required this.title,
-    required this.countLabel,
-  });
+  const _SectionHeader({required this.title, required this.countLabel});
 
   @override
   Widget build(BuildContext context) {
@@ -1104,9 +1100,7 @@ class _SectionHeader extends StatelessWidget {
 class _ConversationCard extends StatefulWidget {
   final _InboxItem item;
 
-  const _ConversationCard({
-    required this.item,
-  });
+  const _ConversationCard({required this.item});
 
   @override
   State<_ConversationCard> createState() => _ConversationCardState();
@@ -1218,8 +1212,9 @@ class _ConversationCardState extends State<_ConversationCard> {
                             style: TextStyle(
                               color: _TetherPalette.text,
                               fontSize: 16,
-                              fontWeight:
-                                  hasUnread ? FontWeight.w900 : FontWeight.w800,
+                              fontWeight: hasUnread
+                                  ? FontWeight.w900
+                                  : FontWeight.w800,
                               letterSpacing: -0.2,
                             ),
                           ),
@@ -1256,15 +1251,22 @@ class _ConversationCardState extends State<_ConversationCard> {
                         color: item.isTyping
                             ? _TetherPalette.primary
                             : item.subtitleBold
-                                ? _TetherPalette.text.withOpacity(0.82)
-                                : _TetherPalette.muted,
+                            ? _TetherPalette.text.withOpacity(0.82)
+                            : _TetherPalette.muted,
                         fontSize: 14.5,
                         height: 1.2,
-                        fontStyle:
-                            item.isTyping ? FontStyle.italic : FontStyle.normal,
-                        fontWeight:
-                            item.subtitleBold ? FontWeight.w700 : FontWeight.w600,
+                        fontStyle: item.isTyping
+                            ? FontStyle.italic
+                            : FontStyle.normal,
+                        fontWeight: item.subtitleBold
+                            ? FontWeight.w700
+                            : FontWeight.w600,
                       ),
+                    ),
+                    const SizedBox(height: 8),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: TetherPulsePill(state: item.pulseState),
                     ),
                   ],
                 ),
@@ -1442,10 +1444,7 @@ class _MessageEmptyState extends StatelessWidget {
   final String title;
   final String subtitle;
 
-  const _MessageEmptyState({
-    required this.title,
-    required this.subtitle,
-  });
+  const _MessageEmptyState({required this.title, required this.subtitle});
 
   @override
   Widget build(BuildContext context) {
@@ -1543,4 +1542,56 @@ class _TetherIconPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+// Tether Pulse
+class _PulseLegend extends StatelessWidget {
+  const _PulseLegend();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Padding(
+      padding: EdgeInsets.symmetric(horizontal: 4),
+      child: Wrap(
+        spacing: 12,
+        runSpacing: 8,
+        children: [
+          _PulseLegendItem(color: Color(0xFF11C5B7), label: 'Strong'),
+          _PulseLegendItem(color: Color(0xFF6C5CFF), label: 'Reply'),
+          _PulseLegendItem(color: Color(0xFF5B5DF0), label: 'New'),
+          _PulseLegendItem(color: Color(0xFF94A3B8), label: 'Quiet'),
+        ],
+      ),
+    );
+  }
+}
+
+class _PulseLegendItem extends StatelessWidget {
+  final Color color;
+  final String label;
+
+  const _PulseLegendItem({required this.color, required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 8,
+          height: 8,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: 6),
+        Text(
+          label,
+          style: const TextStyle(
+            color: _TetherPalette.muted,
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ],
+    );
+  }
 }

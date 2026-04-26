@@ -3,6 +3,8 @@ import 'home/home_screen.dart';
 import 'home/links_screen.dart';
 import 'profile/profile_screen.dart';
 import 'search/search_screen.dart';
+import 'package:provider/provider.dart';
+import '../../providers/notifications_provider.dart';
 
 class AppShell extends StatefulWidget {
   final int initialIndex;
@@ -31,6 +33,23 @@ class _AppShellState extends State<AppShell> {
   void initState() {
     super.initState();
     _currentIndex = widget.initialIndex;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+
+      final provider = context.read<NotificationsProvider>();
+      provider.loadNotifications();
+      provider.startPolling();
+    });
+  }
+
+  @override
+  void dispose() {
+    try {
+      context.read<NotificationsProvider>().stopPolling();
+    } catch (_) {}
+
+    super.dispose();
   }
 
   void _onTap(int index) {

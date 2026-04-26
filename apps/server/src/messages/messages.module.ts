@@ -6,11 +6,15 @@ import { MessagesController } from './messages.controller';
 import { MessagesGateway } from './messages.gateway';
 import { CirclesModule } from '../circles/circles.module';
 import { AuthModule } from '../auth/auth.module';
+import { NotificationsModule } from 'src/notifications/notifications.module';
+import { AuditLogModule } from 'src/audit-log/audit-log.module';
 
 @Module({
   imports: [
     CirclesModule,
     AuthModule,
+    NotificationsModule,
+    AuditLogModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],
       useFactory: async (configService: ConfigService) => ({
@@ -26,4 +30,4 @@ import { AuthModule } from '../auth/auth.module';
   providers: [MessagesService, MessagesGateway],
   exports: [MessagesService],
 })
-export class MessagesModule {}
+export class MessagesModule { }

@@ -9,10 +9,11 @@ import { PrismaService } from '../prisma/prisma.service';
 import { LinkRequestStatus } from '../generated/prisma';
 import { SendLinkRequestDto } from './dto/send-link-request.dto';
 import { RespondLinkRequestDto } from './dto/respond-link-request.dto';
+import { NotificationsService } from 'src/notifications/notifications.service';
 
 @Injectable()
 export class LinksService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private prisma: PrismaService, private notificationsService: NotificationsService) { }
 
   private readonly publicUserSelect = {
     id: true,
@@ -90,16 +91,26 @@ export class LinksService {
 
   async sendRequest(currentUserId: number, dto: SendLinkRequestDto) {
     if (currentUserId === dto.receiverId) {
-      throw new BadRequestException('You cannot add yourself as a Link'); // Prevents sending requests to oneself.
+      throw new BadRequestException('You cannot add yourself as a Link');
     }
 
-    const targetUser = await this.prisma.user.findUnique({
-      where: { id: dto.receiverId },
-      select: { id: true },
-    });
+    const [targetUser, sender] = await Promise.all([
+      this.prisma.user.findUnique({
+        where: { id: dto.receiverId },
+        select: this.publicUserSelect,
+      }),
+      this.prisma.user.findUnique({
+        where: { id: currentUserId },
+        select: this.publicUserSelect,
+      }),
+    ]);
 
     if (!targetUser) {
       throw new NotFoundException('User not found');
+    }
+
+    if (!sender) {
+      throw new NotFoundException('Sender not found');
     }
 
     const existing = await this.prisma.linkRequest.findFirst({
@@ -113,7 +124,6 @@ export class LinksService {
 
     if (existing) {
       if (existing.status === LinkRequestStatus.ACCEPTED) {
-        // if the request already exists and is accepted, they are already contacts
         throw new ConflictException('You are already Linked');
       }
 
@@ -121,11 +131,11 @@ export class LinksService {
         if (existing.senderId === currentUserId) {
           throw new ConflictException('Link request already sent');
         }
+
         throw new ConflictException('This user has already sent you a request');
       }
 
-      //  If the existing request was declined, allow resending by updating the existing record instead of creating a new one.
-      return this.prisma.linkRequest.update({
+      const updatedRequest = await this.prisma.linkRequest.update({
         where: { id: existing.id },
         data: {
           senderId: currentUserId,
@@ -138,9 +148,22 @@ export class LinksService {
           receiver: { select: this.publicUserSelect },
         },
       });
+
+      await this.notificationsService.createNotification({
+        userId: dto.receiverId,
+        type: 'LINK_REQUEST',
+        title: 'New link request',
+        body: `${sender.displayName ?? sender.username} wants to link with you`,
+        metadata: {
+          requestId: updatedRequest.id,
+          senderId: currentUserId,
+        },
+      });
+
+      return updatedRequest;
     }
 
-    return this.prisma.linkRequest.create({
+    const linkRequest = await this.prisma.linkRequest.create({
       data: {
         senderId: currentUserId,
         receiverId: dto.receiverId,
@@ -150,6 +173,19 @@ export class LinksService {
         receiver: { select: this.publicUserSelect },
       },
     });
+
+    await this.notificationsService.createNotification({
+      userId: dto.receiverId,
+      type: 'LINK_REQUEST',
+      title: 'New link request',
+      body: `${sender.displayName ?? sender.username} wants to link with you`,
+      metadata: {
+        requestId: linkRequest.id,
+        senderId: currentUserId,
+      },
+    });
+
+    return linkRequest;
   }
 
   async getIncomingRequests(currentUserId: number) {
@@ -206,7 +242,7 @@ export class LinksService {
         ? LinkRequestStatus.ACCEPTED
         : LinkRequestStatus.DECLINED;
 
-    return this.prisma.linkRequest.update({
+    const updatedRequest = await this.prisma.linkRequest.update({
       where: { id: requestId },
       data: {
         status: nextStatus,
@@ -217,6 +253,21 @@ export class LinksService {
         receiver: { select: this.publicUserSelect },
       },
     });
+
+    if (nextStatus === LinkRequestStatus.ACCEPTED) {
+      await this.notificationsService.createNotification({
+        userId: updatedRequest.senderId,
+        type: 'LINK_ACCEPTED',
+        title: 'Link request accepted',
+        body: `${updatedRequest.receiver.displayName ?? updatedRequest.receiver.username} accepted your link request`,
+        metadata: {
+          requestId: updatedRequest.id,
+          receiverId: updatedRequest.receiverId,
+        },
+      });
+    }
+
+    return updatedRequest;
   }
 
   async getLinks(currentUserId: number) {

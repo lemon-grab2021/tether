@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:tether/providers/deleted_conversations_provider.dart';
+import 'package:tether/providers/in_app_notifications_provider.dart';
 import 'providers/auth_provider.dart';
 import 'providers/circles_provider.dart';
 import 'providers/messages_provider.dart';
@@ -9,6 +10,7 @@ import 'providers/direct_messages_provider.dart';
 import 'presentation/screens/auth/login_screen.dart';
 import 'presentation/screens/home/main_shell.dart';
 import 'providers/links_provider.dart';
+import 'providers/notifications_provider.dart';
 
 void main() {
   runApp(const MyApp());
@@ -27,7 +29,9 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => DirectConversationsProvider()),
         ChangeNotifierProvider(create: (_) => DirectMessagesProvider()),
         ChangeNotifierProvider(create: (_) => LinksProvider()),
+        ChangeNotifierProvider(create: (_) => InAppNotificationsProvider()),
         ChangeNotifierProvider(create: (_) => DeletedConversationsProvider()),
+        ChangeNotifierProvider(create: (_) => NotificationsProvider()),
       ],
       child: MaterialApp(
         title: 'Tether',

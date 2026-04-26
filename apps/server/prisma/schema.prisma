@@ -41,6 +41,7 @@ model User {
   auditLogs     AuditLog[]
   uploads       FileUpload[]
   session       Session[]
+  notifications Notification[]
 
   sentLinkRequests     LinkRequest[] @relation("LinkRequestSender")
   receivedLinkRequests LinkRequest[] @relation("LinkRequestReceiver")
@@ -209,6 +210,25 @@ model Message {
 
   @@index([circleId, createdAt]) // For pagination
   @@index([circleId, deletedAt]) // For filtering deleted messages
+}
+
+// ============================================
+// NOTIFICATION
+// ============================================
+
+model Notification {
+  id        Int       @id @default(autoincrement())
+  userId    Int
+  type      String
+  title     String
+  body      String?
+  data      Json?
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, readAt, createdAt])
 }
 
 // ============================================

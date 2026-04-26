@@ -5,6 +5,7 @@ import '../../widgets/tether_chat_ui.dart';
 
 import '../../../data/services/uploads_service.dart';
 import 'package:intl/intl.dart';
+import '../../../providers/in_app_notifications_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:tether/providers/auth_provider.dart';
 import 'package:tether/providers/messages_provider.dart';
@@ -71,7 +72,36 @@ class _ChatScreenState extends State<ChatScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
 
+      context.read<InAppNotificationsProvider>().setActiveCircle(
+        widget.circle.id,
+      );
+
       _messagesProvider = context.read<MessagesProvider>();
+
+      _messagesProvider!.onIncomingMessage = (message) {
+        if (!mounted) return;
+
+        final currentUserId = context.read<AuthProvider>().user?.id;
+
+        if (message.senderId == currentUserId) return;
+        if (currentUserId == null) return;
+
+        final rawDisplayName = message.sender?.displayName;
+        final senderName =
+            rawDisplayName != null && rawDisplayName.trim().isNotEmpty
+            ? rawDisplayName.trim()
+            : message.sender?.username ?? 'Someone';
+
+        context.read<InAppNotificationsProvider>().notifyCircleMessage(
+          circleId: widget.circle.id,
+          senderId: message.senderId,
+          currentUserId: currentUserId,
+          circleName: widget.circle.name,
+          senderName: senderName,
+          messagePreview: message.body ?? '',
+        );
+      };
+
       await _messagesProvider!.loadMessages(widget.circle.id);
       await _messagesProvider!.connectToCircle(widget.circle.id);
     });
@@ -81,7 +111,12 @@ class _ChatScreenState extends State<ChatScreen> {
   void dispose() {
     _messageController.dispose();
     _scrollController.dispose();
+
+    _messagesProvider?.onIncomingMessage = null;
     _messagesProvider?.disconnect();
+    try {
+      context.read<InAppNotificationsProvider>().setActiveCircle(null);
+    } catch (_) {}
     super.dispose();
   }
 

@@ -71,6 +71,8 @@ class MessagesProvider extends ChangeNotifier {
     }
   }
 
+  void Function(Message message)? onIncomingMessage;
+
   Future<void> editMessage({
     required int circleId,
     required int messageId,
@@ -172,25 +174,26 @@ class MessagesProvider extends ChangeNotifier {
           .whereType<int>()
           .toSet();
 
-      _socket!.on('circle:typing', (data) {
-        final map = Map<String, dynamic>.from(data as Map);
-        final userId = int.tryParse(map['userId'].toString());
-        final isTyping = map['isTyping'] == true;
-
-        if (userId == null) return;
-
-        if (isTyping) {
-          _typingUserIds.add(userId);
-        } else {
-          _typingUserIds.remove(userId);
-        }
-
-        notifyListeners();
-      });
-
       _onlineUserIds
         ..clear()
         ..addAll(ids);
+
+      notifyListeners();
+    });
+
+    // listen for a user typing
+    _socket!.on('circle:typing', (data) {
+      final map = Map<String, dynamic>.from(data as Map);
+      final userId = int.tryParse(map['userId'].toString());
+      final isTyping = map['isTyping'] == true;
+
+      if (userId == null) return;
+
+      if (isTyping) {
+        _typingUserIds.add(userId);
+      } else {
+        _typingUserIds.remove(userId);
+      }
 
       notifyListeners();
     });
@@ -220,6 +223,8 @@ class MessagesProvider extends ChangeNotifier {
 
         _messages.add(message);
         _messages.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+
+        onIncomingMessage?.call(message);
 
         notifyListeners();
       } catch (e) {
@@ -330,21 +335,21 @@ class MessagesProvider extends ChangeNotifier {
 
   // Disconnect from Websocket
   void disconnect() {
-  _typingDebounce?.cancel();
-  _typingUserIds.clear();
-  _onlineUserIds.clear();
-  _iAmTyping = false;
+    _typingDebounce?.cancel();
+    _typingUserIds.clear();
+    _onlineUserIds.clear();
+    _iAmTyping = false;
 
-  if (_socket != null) {
-    _socket!.disconnect();
-    _socket!.dispose();
-    _socket = null;
+    if (_socket != null) {
+      _socket!.disconnect();
+      _socket!.dispose();
+      _socket = null;
+    }
+
+    _isConnected = false;
+    _isJoinedRoom = false;
+    notifyListeners();
   }
-
-  _isConnected = false;
-  _isJoinedRoom = false;
-  notifyListeners();
-}
 
   @override
   void dispose() {

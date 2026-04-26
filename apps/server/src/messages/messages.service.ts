@@ -6,70 +6,115 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CirclesService } from '../circles/circles.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { SendMessageDto } from './dto/send-message.dto';
+import { AuditLogService } from '../audit-log/audit-log.service';
 
 @Injectable()
 export class MessagesService {
   constructor(
     private readonly prisma: PrismaService,
-    private circlesService: CirclesService,
-  ) {}
+    private readonly circlesService: CirclesService,
+    private readonly auditLogService: AuditLogService,
+    private readonly notificationsService: NotificationsService,
+  ) { }
 
-  private readonly userselect = {
+  private readonly userSelect = {
     id: true,
     username: true,
-    displayname: true,
+    displayName: true,
     avatarUrl: true,
   };
 
-  // Send a message to a circle
   async createMessage(userId: number, dto: SendMessageDto) {
-    // Verify user is a member of the circle first
     const isMember = await this.circlesService.isMember(dto.circleId, userId);
-    // If not throw error
+
     if (!isMember) {
       throw new ForbiddenException(
         'You must be a member of this circle to send messages',
       );
     }
 
+    const trimmedBody = dto.body?.trim();
+
+    if ((!trimmedBody || trimmedBody.length === 0) && !dto.mediaUrl) {
+      throw new BadRequestException('Message must contain text or media');
+    }
+
     const message = await this.prisma.message.create({
       data: {
         circleId: dto.circleId,
         senderId: userId,
-        body: dto.body,
+        body: trimmedBody || null,
         mediaUrl: dto.mediaUrl,
       },
       include: {
         sender: {
-          select: {
-            id: true,
-            username: true,
-            displayName: true,
-            avatarUrl: true,
-          },
+          select: this.userSelect,
         },
       },
     });
 
-    // Update circle's updatedAt timestamp
     await this.prisma.circle.update({
       where: { id: dto.circleId },
       data: { updatedAt: new Date() },
     });
 
+    const circle = await this.prisma.circle.findUnique({
+      where: { id: dto.circleId },
+      select: {
+        id: true,
+        name: true,
+        members: {
+          where: {
+            userId: {
+              not: userId,
+            },
+            chatDeletedAt: null,
+          },
+          select: {
+            userId: true,
+          },
+        },
+      },
+    });
+
+    if (circle && circle.members.length > 0) {
+      await this.notificationsService.createNotificationsForUsers({
+        userIds: circle.members.map((member) => member.userId),
+        type: 'CIRCLE_MESSAGE',
+        title: circle.name,
+        body: `${message.sender.displayName ?? message.sender.username}: ${message.body?.trim() || 'Sent an attachment'
+          }`,
+        metadata: {
+          circleId: dto.circleId,
+          messageId: message.id,
+          senderId: userId,
+        },
+      });
+    }
+
+    await this.auditLogService.log({
+      userId,
+      action: 'MESSAGE_SENT',
+      entityType: 'Message',
+      entityId: message.id.toString(),
+      metadata: {
+        circleId: dto.circleId,
+      },
+    });
+
     return message;
   }
 
-  // Get messages for a circle with cursor-based pagination
   async getMessages(
     circleId: number,
     userId: number,
     cursor?: number,
     limit: number = 100,
   ) {
-    // Verify user is a member
     const isMember = await this.circlesService.isMember(circleId, userId);
+
     if (!isMember) {
       throw new ForbiddenException(
         'You must be a member of this circle to view messages',
@@ -79,33 +124,24 @@ export class MessagesService {
     const messages = await this.prisma.message.findMany({
       where: {
         circleId,
-        deletedAt: null, // Don't show soft-deleted messages
+        deletedAt: null,
       },
-      orderBy: [
-        { createdAt: 'desc' }, // Most recent first
-        { id: 'desc' },
-      ],
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       take: limit,
       ...(cursor
         ? {
-            cursor: { id: cursor }, // Cursor is unique
-            skip: 1, // excludes cursor row
-          }
+          cursor: { id: cursor },
+          skip: 1,
+        }
         : {}),
-
       include: {
         sender: {
-          select: {
-            id: true,
-            username: true,
-            displayName: true,
-            avatarUrl: true,
-          },
+          select: this.userSelect,
         },
       },
     });
 
-    return messages.reverse(); // Reverse to show oldest first in UI
+    return messages.reverse();
   }
 
   async findByCircle(circleId: number, cursor?: number, limit = 50) {
@@ -116,12 +152,7 @@ export class MessagesService {
       },
       include: {
         sender: {
-          select: {
-            id: true,
-            username: true,
-            displayName: true,
-            avatarUrl: true,
-          },
+          select: this.userSelect,
         },
       },
       orderBy: {
@@ -130,19 +161,20 @@ export class MessagesService {
       take: limit,
       ...(cursor
         ? {
-            skip: 1,
-            cursor: { id: cursor },
-          }
+          skip: 1,
+          cursor: { id: cursor },
+        }
         : {}),
     });
   }
 
-  // Edit a message (author only)
   async editMessage(messageId: number, userId: number, body: string) {
     const message = await this.prisma.message.findUnique({
       where: { id: messageId },
       include: {
-        sender: { select: this.userselect },
+        sender: {
+          select: this.userSelect,
+        },
       },
     });
 
@@ -159,11 +191,12 @@ export class MessagesService {
     }
 
     const trimmed = body.trim();
+
     if (!trimmed && !message.mediaUrl) {
       throw new BadRequestException('Message must contain text or media');
     }
 
-    return this.prisma.message.update({
+    const updated = await this.prisma.message.update({
       where: { id: messageId },
       data: {
         body: trimmed,
@@ -171,18 +204,33 @@ export class MessagesService {
       },
       include: {
         sender: {
-          select: this.userselect,
+          select: this.userSelect,
         },
       },
     });
+
+    await this.auditLogService.log({
+      userId,
+      action: 'MESSAGE_EDITED',
+      entityType: 'Message',
+      entityId: messageId.toString(),
+      metadata: {
+        circleId: message.circleId,
+        before: message.body,
+        after: trimmed,
+      },
+    });
+
+    return updated;
   }
 
-  // Delete a message (author or moderator)
   async deleteMessage(messageId: number, userId: number) {
     const message = await this.prisma.message.findUnique({
       where: { id: messageId },
       include: {
-        sender: { select: this.userselect },
+        sender: {
+          select: this.userSelect,
+        },
       },
     });
 
@@ -196,6 +244,7 @@ export class MessagesService {
       message.circleId,
       userId,
     );
+
     const isModerator = userRole === 'OWNER' || userRole === 'MODERATOR';
 
     if (!isAuthor && !isModerator) {
@@ -208,7 +257,7 @@ export class MessagesService {
       return message;
     }
 
-    return this.prisma.message.update({
+    const deleted = await this.prisma.message.update({
       where: { id: messageId },
       data: {
         body: null,
@@ -216,8 +265,23 @@ export class MessagesService {
         deletedAt: new Date(),
       },
       include: {
-        sender: { select: this.userselect },
+        sender: {
+          select: this.userSelect,
+        },
       },
     });
+
+    await this.auditLogService.log({
+      userId,
+      action: 'MESSAGE_DELETED',
+      entityType: 'Message',
+      entityId: messageId.toString(),
+      metadata: {
+        circleId: message.circleId,
+        deletedByModerator: !isAuthor && isModerator,
+      },
+    });
+
+    return deleted;
   }
 }

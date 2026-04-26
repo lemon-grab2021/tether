@@ -8,6 +8,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { CreateDirectConversationDto } from './dto/create-direct-message.dto';
 import { UploadsService } from '../uploads/uploads.service';
+import { NotificationsService } from 'src/notifications/notifications.service';
 
 type SendDirectMessageInput = {
   conversationId: number;
@@ -17,7 +18,7 @@ type SendDirectMessageInput = {
 
 @Injectable()
 export class DirectMessagesService {
-  constructor(private prisma: PrismaService, private auditLogService: AuditLogService, private uploadsService: UploadsService) { }
+  constructor(private prisma: PrismaService, private auditLogService: AuditLogService, private uploadsService: UploadsService, private notificationsService: NotificationsService) { }
 
   private readonly userSelect = {
     id: true,
@@ -130,11 +131,19 @@ export class DirectMessagesService {
       },
     });
 
-    if (!conversation) return false; // Conversation not found, treat as not a participant
+    if (!conversation) {
+      throw new NotFoundException('Conversation not found')
+    }; // Conversation not found, treat as not a participant
+
+    const receiverId =
+      conversation.userOneId === userId
+        ? conversation.userTwoId
+        : conversation.userOneId;
 
     return (
       conversation.userOneId === userId || conversation.userTwoId === userId
     ); // Check if the user is either userOne or userTwo
+
   }
 
   async getMessages(
@@ -250,6 +259,30 @@ export class DirectMessagesService {
         mediaUrl,
       );
     }
+    const conversation = await this.prisma.directConversation.findUnique({
+      where: { id: conversationId },
+      select: {
+        id: true,
+        userOneId: true,
+        userTwoId: true,
+      },
+    });
+
+    if (!conversation) {
+      throw new NotFoundException('Conversation not found');
+    }
+
+    if (
+      conversation.userOneId !== userId &&
+      conversation.userTwoId !== userId
+    ) {
+      throw new ForbiddenException('You are not in this conversation');
+    }
+
+    const recipientId =
+      conversation.userOneId === userId
+        ? conversation.userTwoId
+        : conversation.userOneId;
 
     const result = await this.prisma.$transaction(async (tx) => {
       const message = await tx.directMessage.create({
@@ -284,6 +317,28 @@ export class DirectMessagesService {
         objectKey: verifiedUpload?.objectKey,
         mimeType: verifiedUpload?.mimeType,
         sizeBytes: verifiedUpload?.sizeBytes,
+      },
+    });
+
+    await this.auditLogService.log({
+      userId,
+      action: 'MESSAGE_SENT',
+      entityType: 'DirectMessage',
+      entityId: result.id.toString(),
+      metadata: {
+        conversationId,
+      },
+    });
+
+    await this.notificationsService.createNotification({
+      userId: recipientId,
+      type: 'DIRECT_MESSAGE',
+      title: result.sender.displayName ?? result.sender.username,
+      body: result.body?.trim() || 'Sent an attachment',
+      metadata: {
+        conversationId,
+        messageId: result.id,
+        senderId: userId,
       },
     });
 

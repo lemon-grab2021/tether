@@ -14,7 +14,14 @@ import '../../widgets/tether_visual_kit.dart';
 enum LinksTab { links, requests, discover }
 
 class LinksScreen extends StatefulWidget {
-  const LinksScreen({super.key});
+  final LinksTab initialTab;
+  final bool showBackButton;
+
+  const LinksScreen({
+    super.key,
+    this.initialTab = LinksTab.links,
+    this.showBackButton = false,
+  });
 
   @override
   State<LinksScreen> createState() => _LinksScreenState();
@@ -28,7 +35,7 @@ class _LinksScreenState extends State<LinksScreen> {
   Timer? _refreshTimer;
   Timer? _searchDebounce;
 
-  LinksTab _activeTab = LinksTab.links;
+  late LinksTab _activeTab;
 
   int get _selectedTabIndex => LinksTab.values.indexOf(_activeTab);
 
@@ -36,10 +43,17 @@ class _LinksScreenState extends State<LinksScreen> {
   void initState() {
     super.initState();
 
+    _activeTab = widget.initialTab;
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final provider = context.read<LinksProvider>();
       provider.loadLinks();
       provider.loadRequests();
+
+      if (_activeTab == LinksTab.discover &&
+          _searchController.text.trim().isNotEmpty) {
+        provider.searchUsers(_searchController.text.trim());
+      }
     });
 
     _refreshTimer = Timer.periodic(const Duration(seconds: 5), (_) {
@@ -135,8 +149,9 @@ class _LinksScreenState extends State<LinksScreen> {
       SnackBar(
         content: Text(message),
         behavior: SnackBarBehavior.floating,
-        backgroundColor:
-            isError ? TetherVisualPalette.danger : TetherVisualPalette.green,
+        backgroundColor: isError
+            ? TetherVisualPalette.danger
+            : TetherVisualPalette.green,
       ),
     );
   }
@@ -282,7 +297,8 @@ class _LinksScreenState extends State<LinksScreen> {
       return _loadingBlock();
     }
 
-    if (provider.incomingRequests.isEmpty && provider.outgoingRequests.isEmpty) {
+    if (provider.incomingRequests.isEmpty &&
+        provider.outgoingRequests.isEmpty) {
       return const TetherEmptyState(
         icon: Icons.mark_email_unread_outlined,
         title: 'No pending requests',
@@ -478,10 +494,10 @@ class _LinksScreenState extends State<LinksScreen> {
                   onPressed: result.requestId == null
                       ? null
                       : () => _respondToRequest(
-                            provider,
-                            result.requestId!,
-                            'accept',
-                          ),
+                          provider,
+                          result.requestId!,
+                          'accept',
+                        ),
                 ),
               );
               break;
@@ -563,7 +579,19 @@ class _LinksScreenState extends State<LinksScreen> {
               TetherHeader(
                 title: 'Links',
                 subtitle: 'Manage your trusted connections',
-                leading: const TetherIconBadge(icon: Icons.link_rounded),
+                leading: widget.showBackButton
+                    ? Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            onPressed: () => Navigator.pop(context),
+                            icon: const Icon(Icons.arrow_back_ios_new_rounded),
+                            color: TetherVisualPalette.text,
+                          ),
+                          const TetherIconBadge(icon: Icons.link_rounded),
+                        ],
+                      )
+                    : const TetherIconBadge(icon: Icons.link_rounded),
                 actions: [
                   TetherHeaderAction(
                     icon: Icons.refresh_rounded,
@@ -585,6 +613,7 @@ class _LinksScreenState extends State<LinksScreen> {
                             : 'Search links...',
                         onChanged: _onSearchChanged,
                         onClear: () {
+                          _searchController.clear(); // for safety, just in case tethersearchfield doesnt do it internally
                           setState(() {});
                           if (_activeTab == LinksTab.discover) {
                             context.read<LinksProvider>().searchUsers('');

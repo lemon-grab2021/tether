@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../../widgets/tether_chat_ui.dart';
+import '../../../providers/in_app_notifications_provider.dart';
 import 'package:tether/providers/auth_provider.dart';
 import 'package:tether/providers/direct_messages_provider.dart';
 import '../../../data/models/direct_conversation.dart';
@@ -44,6 +45,13 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
   void initState() {
     super.initState();
 
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      context.read<InAppNotificationsProvider>().setActiveDirectConversation(
+        widget.conversation.id,
+      );
+    });
+
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
 
@@ -51,7 +59,32 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
       final currentUserId = authProvider.user?.id;
       if (currentUserId == null) return;
 
+      final otherUser = widget.conversation.otherUser;
+      final otherUserName =
+          (otherUser.displayName != null &&
+              otherUser.displayName!.trim().isNotEmpty)
+          ? otherUser.displayName!.trim()
+          : otherUser.username;
+
+      context.read<InAppNotificationsProvider>().setActiveDirectConversation(
+        widget.conversation.id,
+      );
+
       directMessagesProvider = context.read<DirectMessagesProvider>();
+
+      directMessagesProvider!.onIncomingMessage = (message) {
+        if (!mounted) return;
+
+        if (message.senderId == currentUserId) return;
+
+        context.read<InAppNotificationsProvider>().notifyDirectMessage(
+          conversationId: widget.conversation.id,
+          senderId: message.senderId,
+          currentUserId: currentUserId,
+          senderName: otherUserName,
+          messagePreview: message.body ?? '',
+        );
+      };
 
       try {
         await directMessagesProvider!.loadMessages(widget.conversation.id);
@@ -99,7 +132,14 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
     _typingDebounce?.cancel();
     _messageController.dispose();
     _scrollController.dispose();
+    directMessagesProvider?.onIncomingMessage = null;
     directMessagesProvider?.disconnect();
+    try {
+      context.read<InAppNotificationsProvider>().setActiveDirectConversation(
+        null,
+      );
+    } catch (_) {}
+
     super.dispose();
   }
 

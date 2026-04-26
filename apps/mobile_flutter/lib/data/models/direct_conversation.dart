@@ -6,6 +6,7 @@ class DirectConversation {
   final User otherUser;
   final DirectMessage? lastMessage;
   final DateTime lastMessageAt;
+  final DateTime createdAt;
   final int? userOneId;
   final int? userTwoId;
   final DateTime? userOneLastReadAt;
@@ -18,6 +19,7 @@ class DirectConversation {
     required this.otherUser,
     required this.lastMessage,
     required this.lastMessageAt,
+    required this.createdAt,
     this.userOneLastReadAt,
     this.userTwoLastReadAt,
     this.userOneId,
@@ -39,6 +41,7 @@ class DirectConversation {
     return DirectConversation(
       id: json['id'],
       otherUser: otherUser,
+      createdAt: DateTime.parse(json['createdAt']),
       lastMessage: messages.isNotEmpty
           ? DirectMessage.fromJson(Map<String, dynamic>.from(messages.first))
           : null,
@@ -51,6 +54,7 @@ class DirectConversation {
           : null,
       userOneId: json['userOneId'],
       userTwoId: json['userTwoId'],
+      
     );
   }
 }

@@ -47,6 +47,14 @@ class ApiConstants {
   static String uploadComplete(int uploadId) =>
       '$baseUrl/uploads/$uploadId/complete';
 
+  // Notifications
+  static String get notifications => '$baseUrl/notifications';
+  static String get notificationUnreadCount =>
+      '$baseUrl/notifications/unread-count';
+  static String notificationRead(int id) => '$baseUrl/notifications/$id/read';
+  static String notificationDelete(int id) => '$baseUrl/notifications/$id';
+  static String get notificationsReadAll => '$baseUrl/notifications/read-all';
+
   // WebSocket
   static String get socketUrl {
     if (kIsWeb) {

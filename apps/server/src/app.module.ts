@@ -13,6 +13,7 @@ import { LinksModule } from './links/links.module';
 import { DirectMessagesModule } from './direct-messages/direct-messages.module';
 import { ConversationCleanupService } from './conversation-cleanup.service';
 import { AuditLogModule } from './audit-log/audit-log.module';
+import { NotificationsModule } from './notifications/notifications.module';
 
 @Module({
     imports: [
@@ -33,6 +34,7 @@ import { AuditLogModule } from './audit-log/audit-log.module';
         LinksModule,
         DirectMessagesModule,
         MessagesModule,
+        NotificationsModule,
         UploadsModule,
         AuditLogModule,
     ],

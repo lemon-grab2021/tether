@@ -84,6 +84,8 @@ class DirectMessagesProvider extends ChangeNotifier {
     }
   }
 
+  void Function(DirectMessage message)? onIncomingMessage;
+
   Future<void> loadConversation({
     required int conversationId,
     required int currentUserId,
@@ -256,9 +258,13 @@ class DirectMessagesProvider extends ChangeNotifier {
       );
 
       final exists = _messages.any((m) => m.id == message.id);
+
       if (!exists) {
         _messages.add(message);
         _messages.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+
+        onIncomingMessage?.call(message);
+
         notifyListeners();
       }
 
