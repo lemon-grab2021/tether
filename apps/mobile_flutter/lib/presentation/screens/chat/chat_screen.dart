@@ -1,4 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:file_picker/file_picker.dart' as fp;
+import 'package:mime/mime.dart';
+import '../../widgets/tether_chat_ui.dart';
+
+import '../../../data/services/uploads_service.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:tether/providers/auth_provider.dart';
@@ -21,8 +26,13 @@ class _ChatScreenState extends State<ChatScreen> {
   final _messageController = TextEditingController();
   final _scrollController = ScrollController();
   final _scaffoldKey = GlobalKey<ScaffoldState>();
+  final UploadsService _uploadsService = UploadsService();
 
   MessagesProvider? _messagesProvider;
+  bool _isUploading = false;
+
+  int? _lastRenderedMessageId;
+  bool _didInitialAutoScroll = false;
 
   List<String> _typingNames(MessagesProvider provider, int? currentUserId) {
     final members = widget.circle.members ?? [];
@@ -75,6 +85,7 @@ class _ChatScreenState extends State<ChatScreen> {
     super.dispose();
   }
 
+  // Scroll function
   void _scrollToBottom() {
     if (_scrollController.hasClients) {
       _scrollController.animateTo(
@@ -83,6 +94,66 @@ class _ChatScreenState extends State<ChatScreen> {
         curve: Curves.easeOut,
       );
     }
+  }
+
+  bool _isNearBottom({double threshold = 180}) {
+    if (!_scrollController.hasClients) return true;
+
+    final position = _scrollController.position;
+    final distanceFromBottom = position.maxScrollExtent - position.pixels;
+
+    return distanceFromBottom <= threshold;
+  }
+
+  void _maybeAutoScrollForMessages(List<dynamic> messages, int? currentUserId) {
+    if (messages.isEmpty) return;
+
+    final latestMessage = messages.last;
+    final latestMessageId = latestMessage.id as int;
+
+    final hasNewLatestMessage = _lastRenderedMessageId != latestMessageId;
+
+    final shouldScroll =
+        !_didInitialAutoScroll ||
+        (hasNewLatestMessage &&
+            (latestMessage.senderId == currentUserId || _isNearBottom()));
+
+    _lastRenderedMessageId = latestMessageId;
+    _didInitialAutoScroll = true;
+
+    if (!shouldScroll) return;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _scrollToBottom();
+    });
+  }
+
+  bool _isSameLocalDate(DateTime a, DateTime b) {
+    final localA = a.toLocal();
+    final localB = b.toLocal();
+
+    return localA.year == localB.year &&
+        localA.month == localB.month &&
+        localA.day == localB.day;
+  }
+
+  String _chatDateLabel(DateTime value) {
+    final localValue = value.toLocal();
+    final now = DateTime.now();
+
+    final today = DateTime(now.year, now.month, now.day);
+    final yesterday = today.subtract(const Duration(days: 1));
+    final messageDate = DateTime(
+      localValue.year,
+      localValue.month,
+      localValue.day,
+    );
+
+    if (messageDate == today) return 'Today';
+    if (messageDate == yesterday) return 'Yesterday';
+
+    return DateFormat('dd/MM/yyyy').format(localValue);
   }
 
   void _sendMessage() {
@@ -120,6 +191,87 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
+  Future<void> _pickAndSendMedia() async {
+    if (_isUploading) return;
+
+    final provider = context.read<MessagesProvider>();
+
+    if (!provider.isJoinedRoom) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please wait a moment and try again.'),
+          backgroundColor: Colors.grey,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
+    try {
+      final result = await fp.FilePicker.pickFiles(
+        type: fp.FileType.custom,
+        allowedExtensions: ['jpg', 'jpeg', 'png', 'webp', 'mp4', 'webm', 'mov'],
+        withData: true,
+      );
+
+      if (result == null || result.files.isEmpty) return;
+
+      final file = result.files.first;
+      final bytes = file.bytes;
+
+      if (bytes == null) {
+        throw Exception('Could not read selected file');
+      }
+
+      final mimeType =
+          lookupMimeType(file.name, headerBytes: bytes) ??
+          'application/octet-stream';
+
+      final isAllowed =
+          mimeType.startsWith('image/') || mimeType.startsWith('video/');
+
+      if (!isAllowed) {
+        throw Exception('Only images and videos are allowed');
+      }
+
+      setState(() => _isUploading = true);
+
+      final uploaded = await _uploadsService.uploadMedia(
+        filename: file.name,
+        mimeType: mimeType,
+        fileSize: bytes.length,
+        bytes: bytes,
+      );
+
+      if (uploaded.fileUrl.isEmpty) {
+        throw Exception('Upload completed but no file URL was returned');
+      }
+
+      provider.sendMessage(
+        circleId: widget.circle.id,
+        mediaUrl: uploaded.fileUrl,
+      );
+
+      Future.delayed(const Duration(milliseconds: 120), _scrollToBottom);
+    } catch (e) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Failed to upload attachment: ${e.toString().replaceAll('Exception: ', '')}',
+          ),
+          backgroundColor: Colors.red,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isUploading = false);
+      }
+    }
+  }
+
   String _memberCountText() {
     final count =
         widget.circle.messageCount?.members ??
@@ -136,17 +288,11 @@ class _ChatScreenState extends State<ChatScreen> {
     final messages = provider.messages;
     final typingNames = _typingNames(provider, currentUserId);
 
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (messages.isNotEmpty) {
-        _scrollToBottom();
-      }
-    });
-
-    final hasTypedText = _messageController.text.trim().isNotEmpty;
+    _maybeAutoScrollForMessages(messages, currentUserId);
 
     return Scaffold(
       key: _scaffoldKey,
-      backgroundColor: const Color(0xFFF3F7FB),
+      backgroundColor: TetherChatPalette.background,
       endDrawer: _CircleMembersDrawer(circle: widget.circle),
       appBar: AppBar(
         backgroundColor: Colors.white.withOpacity(0.96),
@@ -230,216 +376,134 @@ class _ChatScreenState extends State<ChatScreen> {
           const SizedBox(width: 4),
         ],
       ),
-      body: Column(
-        children: [
-          Expanded(
-            child: provider.isLoading
-                ? const Center(child: CircularProgressIndicator())
-                : provider.error != null && messages.isEmpty
-                ? Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(24),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            Icons.error_outline_rounded,
-                            size: 54,
-                            color: Colors.blueGrey.shade300,
-                          ),
-                          const SizedBox(height: 14),
-                          const Text(
-                            'Could not load messages',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.w800,
-                              color: Color(0xFF0F172A),
+      body: TetherChatBackground(
+        child: Column(
+          children: [
+            Expanded(
+              child: provider.isLoading
+                  ? const Center(child: CircularProgressIndicator())
+                  : provider.error != null && messages.isEmpty
+                  ? Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(24),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.error_outline_rounded,
+                              size: 54,
+                              color: Colors.blueGrey.shade300,
                             ),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            provider.error!,
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(
-                              fontSize: 14.5,
-                              color: Color(0xFF64748B),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  )
-                : ListView.builder(
-                    controller: _scrollController,
-                    padding: const EdgeInsets.fromLTRB(12, 16, 12, 16),
-                    itemCount: messages.length + 1,
-                    itemBuilder: (context, index) {
-                      if (index == 0) {
-                        return _CircleConversationIntro(circle: widget.circle);
-                      }
-
-                      final message = messages[index - 1];
-                      final prev = index - 2 >= 0 ? messages[index - 2] : null;
-                      final next = index < messages.length
-                          ? messages[index]
-                          : null;
-
-                      final isMe = message.senderId == currentUserId;
-                      final senderChangedFromPrevious =
-                          prev == null || prev.senderId != message.senderId;
-                      final senderChangesNext =
-                          next == null || next.senderId != message.senderId;
-
-                      final showSender = !isMe && senderChangedFromPrevious;
-                      final showAvatar = !isMe && senderChangesNext;
-                      final showTimestamp = true;
-
-                      return _CircleMessageBubble(
-                        message: message,
-                        isMe: isMe,
-                        showSender: showSender,
-                        showAvatar: showAvatar,
-                        showTail: senderChangesNext,
-                        showTimestamp: showTimestamp,
-                      );
-                    },
-                  ),
-          ),
-          AnimatedSwitcher(
-            duration: const Duration(milliseconds: 180),
-            child: typingNames.isEmpty
-                ? const SizedBox.shrink()
-                : Padding(
-                    padding: const EdgeInsets.fromLTRB(18, 0, 18, 8),
-                    child: Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 8,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(18),
-                            border: Border.all(color: const Color(0xFFE2E8F0)),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const _TypingDots(),
-                              const SizedBox(width: 8),
-                              Text(
-                                _typingLabel(typingNames),
-                                style: const TextStyle(
-                                  fontSize: 13.5,
-                                  color: Color(0xFF64748B),
-                                  fontWeight: FontWeight.w500,
-                                ),
+                            const SizedBox(height: 14),
+                            const Text(
+                              'Could not load messages',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.w800,
+                                color: Color(0xFF0F172A),
                               ),
-                            ],
-                          ),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              provider.error!,
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                fontSize: 14.5,
+                                color: Color(0xFF64748B),
+                              ),
+                            ),
+                          ],
                         ),
-                      ],
-                    ),
-                  ),
-          ),
-          SafeArea(
-            top: false,
-            child: Container(
-              padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
-              decoration: BoxDecoration(
-                color: const Color(0xFFF8FBFF),
-                border: const Border(top: BorderSide(color: Color(0xFFE2E8F0))),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.03),
-                    blurRadius: 12,
-                    offset: const Offset(0, -2),
-                  ),
-                ],
-              ),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  IconButton(
-                    onPressed: () {},
-                    icon: const Icon(Icons.attach_file_rounded),
-                    color: const Color(0xFF64748B),
-                  ),
-                  Expanded(
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 14),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFEFF4F8),
-                        borderRadius: BorderRadius.circular(22),
                       ),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          Expanded(
-                            child: TextField(
-                              controller: _messageController,
-                              minLines: 1,
-                              maxLines: 4,
-                              onChanged: (value) {
-                                setState(() {});
-                                context
-                                    .read<MessagesProvider>()
-                                    .handleComposerChanged(
-                                      circleId: widget.circle.id,
-                                      value: value,
-                                    );
-                              },
-                              textInputAction: TextInputAction.send,
-                              onSubmitted: (_) => _sendMessage(),
-                              decoration: InputDecoration(
-                                hintText: 'Message...',
-                                border: InputBorder.none,
-                                contentPadding: const EdgeInsets.symmetric(
-                                  vertical: 14,
-                                ),
-                                isDense: true,
+                    )
+                  : ListView.builder(
+                      controller: _scrollController,
+                      padding: const EdgeInsets.fromLTRB(12, 16, 12, 16),
+                      itemCount: messages.length + 1,
+                      itemBuilder: (context, index) {
+                        if (index == 0) {
+                          return _CircleConversationIntro(
+                            circle: widget.circle,
+                          );
+                        }
+
+                        final message = messages[index - 1];
+                        final prev = index - 2 >= 0
+                            ? messages[index - 2]
+                            : null;
+                        final next = index < messages.length
+                            ? messages[index]
+                            : null;
+
+                        final isMe = message.senderId == currentUserId;
+                        final dateChanged =
+                            prev == null ||
+                            !_isSameLocalDate(
+                              prev.createdAt,
+                              message.createdAt,
+                            );
+
+                        final senderChangedFromPrevious =
+                            prev == null ||
+                            dateChanged ||
+                            prev.senderId != message.senderId;
+                        final senderChangesNext =
+                            next == null || next.senderId != message.senderId;
+
+                        final showSender = !isMe && senderChangedFromPrevious;
+                        final showAvatar = !isMe && senderChangesNext;
+                        final showTimestamp = true;
+
+                        final showDateSeparator =
+                            prev == null ||
+                            !_isSameLocalDate(
+                              prev.createdAt,
+                              message.createdAt,
+                            );
+
+                        return Column(
+                          crossAxisAlignment: isMe
+                              ? CrossAxisAlignment.end
+                              : CrossAxisAlignment.start,
+                          children: [
+                            if (showDateSeparator)
+                              _DateSeparator(
+                                label: _chatDateLabel(message.createdAt),
                               ),
+                            _CircleMessageBubble(
+                              message: message,
+                              isMe: isMe,
+                              showSender: showSender,
+                              showAvatar: showAvatar,
+                              showTail: senderChangesNext,
+                              showTimestamp: showTimestamp,
                             ),
-                          ),
-                          IconButton(
-                            onPressed: () {},
-                            icon: const Icon(Icons.mood_outlined),
-                            color: const Color(0xFF64748B),
-                          ),
-                        ],
-                      ),
+                          ],
+                        );
+                      },
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  Container(
-                    width: 48,
-                    height: 48,
-                    decoration: BoxDecoration(
-                      color: hasTypedText
-                          ? const Color(0xFF1274E7)
-                          : const Color(0xFFE2E8F0),
-                      shape: BoxShape.circle,
-                    ),
-                    child: IconButton(
-                      onPressed: hasTypedText && provider.isJoinedRoom
-                          ? _sendMessage
-                          : null,
-                      icon: Icon(
-                        hasTypedText
-                            ? Icons.send_rounded
-                            : Icons.mic_none_rounded,
-                        color: hasTypedText
-                            ? Colors.white
-                            : const Color(0xFF64748B),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
             ),
-          ),
-        ],
+            TetherTypingPill(
+              visible: typingNames.isNotEmpty,
+              label: _typingLabel(typingNames),
+            ),
+            TetherComposer(
+              controller: _messageController,
+              hasText: _messageController.text.trim().isNotEmpty,
+              canSend: provider.isJoinedRoom,
+              isUploading: _isUploading,
+              onAttach: _pickAndSendMedia,
+              onSend: _sendMessage,
+              onChanged: (value) {
+                setState(() {});
+                context.read<MessagesProvider>().handleComposerChanged(
+                  circleId: widget.circle.id,
+                  value: value,
+                );
+              },
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -551,19 +615,6 @@ class _CircleMessageBubble extends StatelessWidget {
     required this.showTimestamp,
   });
 
-  Color _senderColor(String name) {
-    const colors = [
-      Color(0xFF2563EB),
-      Color(0xFF4F46E5),
-      Color(0xFF0891B2),
-      Color(0xFF0F766E),
-      Color(0xFF7C3AED),
-      Color(0xFF0284C7),
-    ];
-    if (name.isEmpty) return colors[0];
-    return colors[name.codeUnitAt(0) % colors.length];
-  }
-
   @override
   Widget build(BuildContext context) {
     final senderName = message.sender?.displayName ?? 'Unknown';
@@ -572,127 +623,22 @@ class _CircleMessageBubble extends StatelessWidget {
       'h:mm a',
     ).format(message.createdAt.toLocal());
 
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.end,
-        mainAxisAlignment: isMe
-            ? MainAxisAlignment.end
-            : MainAxisAlignment.start,
-        children: [
-          if (!isMe)
-            SizedBox(
-              width: 42,
-              child: showAvatar
-                  ? Align(
-                      alignment: Alignment.bottomLeft,
-                      child: _UserAvatar(
-                        name: senderName,
-                        avatarUrl: senderAvatar,
-                        radius: 18,
-                      ),
-                    )
-                  : const SizedBox.shrink(),
-            ),
-          if (!isMe) const SizedBox(width: 8),
-          Flexible(
-            child: Column(
-              crossAxisAlignment: isMe
-                  ? CrossAxisAlignment.end
-                  : CrossAxisAlignment.start,
-              children: [
-                if (showSender)
-                  Padding(
-                    padding: const EdgeInsets.only(left: 6, bottom: 4),
-                    child: Text(
-                      senderName,
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w700,
-                        color: _senderColor(senderName),
-                      ),
-                    ),
-                  ),
-                Container(
-                  constraints: BoxConstraints(
-                    maxWidth: MediaQuery.of(context).size.width * 0.68,
-                  ),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 12,
-                  ),
-                  decoration: BoxDecoration(
-                    color: isMe ? const Color(0xFF1274E7) : Colors.white,
-                    borderRadius: BorderRadius.only(
-                      topLeft: const Radius.circular(22),
-                      topRight: const Radius.circular(22),
-                      bottomLeft: Radius.circular(
-                        isMe ? 22 : (showTail ? 8 : 22),
-                      ),
-                      bottomRight: Radius.circular(
-                        isMe ? (showTail ? 8 : 22) : 22,
-                      ),
-                    ),
-                    border: isMe
-                        ? null
-                        : Border.all(color: const Color(0xFFE2E8F0)),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.04),
-                        blurRadius: 10,
-                        offset: const Offset(0, 3),
-                      ),
-                    ],
-                  ),
-                  child: Column(
-                    crossAxisAlignment: isMe
-                        ? CrossAxisAlignment.end
-                        : CrossAxisAlignment.start,
-                    children: [
-                      if (message.body != null)
-                        Text(
-                          message.body!,
-                          style: TextStyle(
-                            fontSize: 15,
-                            height: 1.35,
-                            color: isMe
-                                ? Colors.white
-                                : const Color(0xFF0F172A),
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      if (message.mediaUrl != null)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 8),
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(14),
-                            child: Image.network(
-                              message.mediaUrl!,
-                              fit: BoxFit.cover,
-                            ),
-                          ),
-                        ),
-                      if (showTimestamp) ...[
-                        const SizedBox(height: 6),
-                        Text(
-                          formattedTime,
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: isMe
-                                ? Colors.white.withOpacity(0.72)
-                                : const Color(0xFF64748B),
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
+    final isDeleted = message.deletedAt != null;
+    final isEdited = message.editedAt != null && !isDeleted;
+
+    final metaText = '$formattedTime${isEdited ? ' • edited' : ''}';
+
+    return TetherChatBubble(
+      isMe: isMe,
+      text: message.body,
+      mediaUrl: message.mediaUrl,
+      isDeleted: isDeleted,
+      metaText: metaText,
+      showSender: showSender,
+      senderName: senderName,
+      senderAvatarUrl: senderAvatar,
+      showAvatar: showAvatar,
+      showTail: showTail,
     );
   }
 }
@@ -1230,65 +1176,49 @@ class _InfoStatCard extends StatelessWidget {
   }
 }
 
-class _TypingDots extends StatefulWidget {
-  const _TypingDots();
+class _DateSeparator extends StatelessWidget {
+  final String label;
 
-  @override
-  State<_TypingDots> createState() => _TypingDotsState();
-}
-
-class _TypingDotsState extends State<_TypingDots>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _controller;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 900),
-    )..repeat();
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  Widget _dot(double delay) {
-    return AnimatedBuilder(
-      animation: _controller,
-      builder: (context, child) {
-        final value = (_controller.value - delay).clamp(0.0, 1.0);
-        final opacity = (value <= 0.5) ? value * 2 : (1 - value) * 2;
-
-        return Opacity(
-          opacity: opacity.clamp(0.25, 1.0),
-          child: Container(
-            width: 8,
-            height: 8,
-            decoration: const BoxDecoration(
-              color: Color(0xFF94A3B8),
-              shape: BoxShape.circle,
-            ),
-          ),
-        );
-      },
-    );
-  }
+  const _DateSeparator({required this.label});
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        _dot(0.0),
-        const SizedBox(width: 6),
-        _dot(0.2),
-        const SizedBox(width: 6),
-        _dot(0.4),
-      ],
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 14),
+      child: Row(
+        children: [
+          const Expanded(
+            child: Divider(color: Color(0xFFE4E7EC), thickness: 1),
+          ),
+          Container(
+            margin: const EdgeInsets.symmetric(horizontal: 10),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.88),
+              borderRadius: BorderRadius.circular(999),
+              border: Border.all(color: const Color(0xFFE4E7EC)),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.03),
+                  blurRadius: 8,
+                  offset: const Offset(0, 3),
+                ),
+              ],
+            ),
+            child: Text(
+              label,
+              style: const TextStyle(
+                fontSize: 12.5,
+                fontWeight: FontWeight.w800,
+                color: Color(0xFF667085),
+              ),
+            ),
+          ),
+          const Expanded(
+            child: Divider(color: Color(0xFFE4E7EC), thickness: 1),
+          ),
+        ],
+      ),
     );
   }
 }

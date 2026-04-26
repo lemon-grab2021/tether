@@ -292,43 +292,28 @@ class DirectMessagesProvider extends ChangeNotifier {
     String? body,
     String? mediaUrl,
   }) async {
-    if (_socket == null || !_isConnected || !_isJoinedRoom) {
+    if (_socket == null || !_isJoinedRoom) {
       throw Exception('Not connected to direct conversation');
     }
 
-    final completer = Completer<void>();
+    final payload = <String, dynamic>{'conversationId': conversationId};
 
-    _socket!.emitWithAck(
-      'direct:message:send',
-      {'conversationId': conversationId, 'body': body, 'mediaUrl': mediaUrl},
-      ack: (data) {
-        try {
-          if (data == null) {
-            _error = 'No response from server while sending message';
-            notifyListeners();
-            completer.completeError(Exception(_error));
-            return;
-          }
+    final trimmedBody = body?.trim();
+    final trimmedMediaUrl = mediaUrl?.trim();
 
-          final map = Map<String, dynamic>.from(data as Map);
+    if (trimmedBody != null && trimmedBody.isNotEmpty) {
+      payload['body'] = trimmedBody;
+    }
 
-          if (map['success'] != true) {
-            _error = map['error']?.toString() ?? 'Failed to send message';
-            notifyListeners();
-            completer.completeError(Exception(_error));
-            return;
-          }
+    if (trimmedMediaUrl != null && trimmedMediaUrl.isNotEmpty) {
+      payload['mediaUrl'] = trimmedMediaUrl;
+    }
 
-          _error = null;
-          notifyListeners();
-          completer.complete();
-        } catch (e) {
-          completer.completeError(e);
-        }
-      },
-    );
+    if (!payload.containsKey('body') && !payload.containsKey('mediaUrl')) {
+      throw Exception('Message cannot be empty');
+    }
 
-    return completer.future;
+    _socket!.emitWithAck('direct:message:send', payload);
   }
 
   void startTyping(int conversationId) {

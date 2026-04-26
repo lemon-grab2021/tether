@@ -57,17 +57,21 @@ export class AuthController {
         );
     }
 
+    @UseGuards(JwtAuthGuard)
     @Post('logout')
     @HttpCode(HttpStatus.OK)
-    async logout(@Body() dto: RefreshTokenDto) {
-        return this.authService.logout(dto.refreshToken);
+    async logout(@Req() req: any) {
+        return this.authService.logout(
+            req.user.sessionId, // from JWT payload
+            req.user.id,       // userId
+        );
     }
 
     @UseGuards(JwtAuthGuard)
     @Post('logout-all')
     @HttpCode(HttpStatus.OK)
     async logoutAll(@Req() req: any) {
-        return this.authService.logoutAll(req.user.id);
+        return this.authService.logoutAll(req.user.id, req.user.sessionId,);
     }
 
     @UseGuards(JwtAuthGuard)

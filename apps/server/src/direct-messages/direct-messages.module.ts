@@ -4,11 +4,13 @@ import { DirectMessagesController } from './direct-messages.controller';
 import { DirectMessagesService } from './direct-messages.service';
 import { DirectMessagesGateway } from './direct-messages.gateway';
 import { PrismaModule } from '../prisma/prisma.module';
+import { AuditLogModule } from 'src/audit-log/audit-log.module';
+import { UploadsModule } from 'src/uploads/uploads.module';
 
 @Module({
-  imports: [PrismaModule, JwtModule],
+  imports: [PrismaModule, JwtModule, AuditLogModule, UploadsModule],
   controllers: [DirectMessagesController],
   providers: [DirectMessagesService, DirectMessagesGateway],
   exports: [DirectMessagesService],
 })
-export class DirectMessagesModule {}
+export class DirectMessagesModule { }

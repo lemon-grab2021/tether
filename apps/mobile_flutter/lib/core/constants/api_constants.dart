@@ -31,10 +31,8 @@ class ApiConstants {
   static String get links => '$baseUrl/links';
   static String get linkSearch => '$baseUrl/links/search';
   static String get linkRequests => '$baseUrl/links/requests';
-  static String get incomingLinkRequests =>
-      '$baseUrl/links/requests/incoming';
-  static String get outgoingLinkRequests =>
-      '$baseUrl/links/requests/outgoing';
+  static String get incomingLinkRequests => '$baseUrl/links/requests/incoming';
+  static String get outgoingLinkRequests => '$baseUrl/links/requests/outgoing';
   static String linkRequestById(int requestId) =>
       '$baseUrl/links/requests/$requestId';
   static String linkByUserId(int userId) => '$baseUrl/links/$userId';
@@ -46,6 +44,8 @@ class ApiConstants {
 
   // Uploads
   static String get uploadRequest => '$baseUrl/uploads/request';
+  static String uploadComplete(int uploadId) =>
+      '$baseUrl/uploads/$uploadId/complete';
 
   // WebSocket
   static String get socketUrl {

@@ -1,4 +1,4 @@
-import { IsInt, IsOptional, IsString, Min } from 'class-validator';
+import { IsInt, IsOptional, IsString, Min, IsUrl } from 'class-validator';
 
 export class SendDirectMessageDto {
   @IsInt()
@@ -10,6 +10,14 @@ export class SendDirectMessageDto {
   body?: string;
 
   @IsOptional()
-  @IsString()
+  @IsUrl(
+    {
+      require_protocol: true,
+      require_tld: false,
+    },
+    {
+      message: 'mediaUrl must be a valid URL',
+    },
+  )
   mediaUrl?: string;
 }

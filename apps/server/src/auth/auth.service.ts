@@ -83,14 +83,12 @@ export class AuthService {
         });
 
         // log failed login attempts
-        if (!user || !(await argon2.verify(user.passwordHash, dto.password))) {
+        if (!user) {
             await this.auditLogService.log({
-                userId: user?.id,
+                userId: 0,
                 action: 'LOGIN_FAILED',
-                entityType: 'User',
-                metadata: {
-                    usernameOrEmail: dto.usernameOrEmail,
-                },
+                entityType: 'Auth',
+                entityId: dto.usernameOrEmail,
             });
 
             throw new UnauthorizedException('Invalid credentials');
@@ -99,18 +97,24 @@ export class AuthService {
         const passwordValid = await argon2.verify(user.passwordHash, dto.password);
 
         if (!passwordValid) {
+            await this.auditLogService.log({
+                userId: user.id,
+                action: 'USER_LOGIN',
+                entityType: 'User',
+                entityId: user.id.toString(),
+                metadata: {
+                    ipAddress,
+                    userAgent,
+                },
+            });
             throw new UnauthorizedException('Invalid credentials');
         }
 
         await this.auditLogService.log({
             userId: user.id,
-            action: 'USER_LOGIN',
+            action: 'USER_LOGGED_IN',
             entityType: 'User',
             entityId: user.id.toString(),
-            metadata: {
-                ipAddress,
-                userAgent,
-            },
         });
 
         const tokens = await this.generateTokens(
@@ -239,7 +243,7 @@ export class AuthService {
         });
     }
 
-    async logoutAll(userId: number) {
+    async logoutAll(userId: number, sessionId: string) {
         await this.prisma.session.updateMany({
             where: {
                 userId,
@@ -248,6 +252,13 @@ export class AuthService {
             data: {
                 revokedAt: new Date(),
             },
+        });
+
+        await this.auditLogService.log({
+            userId,
+            action: 'USER_LOGOUT_ALL',
+            entityType: 'Session',
+            entityId: sessionId,
         });
     }
 
@@ -371,23 +382,5 @@ export class AuthService {
         }
 
         return new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
-    }
-
-    async log(params: {
-        userId?: number;
-        action: string;
-        entityType: string;
-        entityId?: string | number;
-        metadata?: any;
-    }) {
-        return this.prisma.auditLog.create({
-            data: {
-                userId: params.userId,
-                action: params.action,
-                entityType: params.entityType,
-                entityId: params.entityId?.toString(), // ✅ normalize here
-                metadata: params.metadata,
-            },
-        });
     }
 }

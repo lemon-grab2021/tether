@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
+
 import '../../../providers/deleted_conversations_provider.dart';
 import '../../../providers/auth_provider.dart';
 import '../../../providers/circles_provider.dart';
@@ -51,6 +52,7 @@ class _SearchScreenState extends State<SearchScreen> {
           .read<DirectConversationsProvider>();
       final linksProvider = context.read<LinksProvider>();
       final currentUserId = authProvider.user?.id;
+
       if (currentUserId != null &&
           directConversationsProvider.conversations.isEmpty) {
         await directConversationsProvider.loadConversations(
@@ -65,6 +67,7 @@ class _SearchScreenState extends State<SearchScreen> {
       if (linksProvider.links.isEmpty) {
         await linksProvider.loadLinks();
       }
+
       await linksProvider.loadRequests();
     });
   }
@@ -214,6 +217,7 @@ class _SearchScreenState extends State<SearchScreen> {
             'Failed to open conversation: ${e.toString().replaceAll('Exception: ', '')}',
           ),
           backgroundColor: Colors.red,
+          behavior: SnackBarBehavior.floating,
         ),
       );
     }
@@ -269,8 +273,8 @@ class _SearchScreenState extends State<SearchScreen> {
             snippet: conversation.lastMessage?.body?.trim().isNotEmpty == true
                 ? conversation.lastMessage!.body!
                 : conversation.lastMessage?.mediaUrl != null
-                ? 'Sent an attachment'
-                : 'No messages yet',
+                    ? 'Sent an attachment'
+                    : 'No messages yet',
             createdAt:
                 conversation.lastMessage?.createdAt ??
                 conversation.lastMessageAt,
@@ -305,12 +309,10 @@ class _SearchScreenState extends State<SearchScreen> {
       );
     }
 
-    // Existing accepted links
     for (final link in linksProvider.links) {
       upsert(user: link.user, relationship: 'link');
     }
 
-    // Incoming requests
     for (final request in linksProvider.incomingRequests) {
       final sender = request.sender;
       if (sender != null) {
@@ -322,7 +324,6 @@ class _SearchScreenState extends State<SearchScreen> {
       }
     }
 
-    // Outgoing requests
     for (final request in linksProvider.outgoingRequests) {
       final receiver = request.receiver;
       if (receiver != null) {
@@ -334,7 +335,6 @@ class _SearchScreenState extends State<SearchScreen> {
       }
     }
 
-    // Backend discover/search results
     for (final result in linksProvider.searchResults) {
       upsert(
         user: result.user,
@@ -439,6 +439,7 @@ class _SearchScreenState extends State<SearchScreen> {
         const SnackBar(
           content: Text('Link request sent successfully'),
           backgroundColor: Colors.green,
+          behavior: SnackBarBehavior.floating,
         ),
       );
 
@@ -455,6 +456,7 @@ class _SearchScreenState extends State<SearchScreen> {
             'Failed to send link request: ${e.toString().replaceAll('Exception: ', '')}',
           ),
           backgroundColor: Colors.red,
+          behavior: SnackBarBehavior.floating,
         ),
       );
     }
@@ -482,6 +484,7 @@ class _SearchScreenState extends State<SearchScreen> {
             'Failed to accept request: ${e.toString().replaceAll('Exception: ', '')}',
           ),
           backgroundColor: Colors.red,
+          behavior: SnackBarBehavior.floating,
         ),
       );
     }
@@ -493,28 +496,21 @@ class _SearchScreenState extends State<SearchScreen> {
     return GestureDetector(
       onTap: () => setState(() => _activeFilter = filter),
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 180),
-        curve: Curves.easeOut,
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeOutCubic,
         padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 11),
         decoration: BoxDecoration(
-          color: active ? const Color(0xFF1274E7) : const Color(0xFFEFF4F8),
+          gradient: active ? _TetherSearchStyle.primaryGradient : null,
+          color: active ? null : const Color(0xFFF1F3FA),
           borderRadius: BorderRadius.circular(999),
-          boxShadow: active
-              ? [
-                  BoxShadow(
-                    color: const Color(0xFF1274E7).withOpacity(0.24),
-                    blurRadius: 12,
-                    offset: const Offset(0, 4),
-                  ),
-                ]
-              : null,
+          boxShadow: active ? _TetherSearchStyle.glowShadow : null,
         ),
         child: Text(
           label,
           style: TextStyle(
             fontSize: 14,
-            fontWeight: FontWeight.w700,
-            color: active ? Colors.white : const Color(0xFF64748B),
+            fontWeight: FontWeight.w800,
+            color: active ? Colors.white : const Color(0xFF667085),
           ),
         ),
       ),
@@ -542,6 +538,7 @@ class _SearchScreenState extends State<SearchScreen> {
       linksProvider: linksProvider,
       currentUserId: currentUserId,
     );
+
     final circleResults = _buildCircleResults(
       circlesProvider.circles
           .where((c) => !deletedProvider.isCircleDeleted(c.id))
@@ -556,250 +553,230 @@ class _SearchScreenState extends State<SearchScreen> {
         circleResults.isNotEmpty;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF3F7FB),
-      body: SafeArea(
-        child: RefreshIndicator(
-          onRefresh: _refreshSearch,
-          child: Column(
-            children: [
-              Container(
-                padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
-                decoration: const BoxDecoration(
-                  color: Color(0xFFF3F7FB),
-                  border: Border(bottom: BorderSide(color: Color(0xFFE5EDF5))),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Search',
-                      style: TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.w800,
-                        color: Color(0xFF0F172A),
-                      ),
-                    ),
-                    const SizedBox(height: 14),
-                    Container(
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(22),
-                        border: Border.all(
-                          color: _hasQuery
-                              ? const Color(0xFF1274E7).withOpacity(0.35)
-                              : const Color(0xFFE2E8F0),
-                          width: 1.5,
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: const Color(
-                              0xFF1274E7,
-                            ).withOpacity(_hasQuery ? 0.08 : 0.03),
-                            blurRadius: 16,
-                            offset: const Offset(0, 4),
-                          ),
-                        ],
-                      ),
-                      // when a user presses enter/search saves the search
-                      child: TextField(
-                        controller: _searchController,
-                        onChanged: _onSearchChanged,
-                        onSubmitted: (value) {
-                          _commitRecentSearch(value);
-                          _onSearchChanged(value);
-                        },
-                        textInputAction: TextInputAction.search,
-                        decoration: InputDecoration(
-                          hintText: 'Search people, circles, messages...',
-                          prefixIcon: const Icon(Icons.search_rounded),
-                          suffixIcon: _hasQuery
-                              ? IconButton(
-                                  onPressed: () {
-                                    _searchController.clear();
-                                    _onSearchChanged('');
-                                  },
-                                  icon: const Icon(Icons.close_rounded),
-                                )
-                              : null,
-                          border: InputBorder.none,
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 16,
-                          ),
-                        ),
-                      ),
-                    ),
-                    if (_hasQuery) ...[
-                      const SizedBox(height: 14),
-                      SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        child: Row(
-                          children: [
-                            _buildFilterChip('All', SearchFilter.all),
-                            const SizedBox(width: 8),
-                            _buildFilterChip('Messages', SearchFilter.messages),
-                            const SizedBox(width: 8),
-                            _buildFilterChip('People', SearchFilter.people),
-                            const SizedBox(width: 8),
-                            _buildFilterChip('Circles', SearchFilter.circles),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-              Expanded(
-                child: ListView(
-                  physics: const AlwaysScrollableScrollPhysics(),
-                  padding: const EdgeInsets.fromLTRB(16, 18, 16, 28),
-                  children: [
-                    if (!_hasQuery) ...[
-                      const SizedBox(height: 30),
-                      const _SearchIdleState(),
-                      const SizedBox(height: 28),
-                      if (_recentSearches.isNotEmpty) ...[
-                        const Text(
-                          'RECENT SEARCHES',
-                          style: TextStyle(
-                            fontSize: 12,
-                            letterSpacing: 0.8,
-                            fontWeight: FontWeight.w800,
-                            color: Color(0xFF64748B),
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        ..._recentSearches.map(
-                          (search) => Padding(
-                            padding: const EdgeInsets.only(bottom: 8),
-                            child: _RecentSearchTile(
-                              label: search,
-                              onTap: () {
-                                _searchController.text = search;
-                                _commitRecentSearch(
-                                  search,
-                                ); // saves search when a recent search is tapped
-                                _onSearchChanged(search);
-                              },
-                            ),
-                          ),
-                        ),
-                      ],
-                    ] else if (!hasResults &&
-                        !linksProvider.isLoading &&
-                        !directProvider.isLoading &&
-                        !circlesProvider.isLoading) ...[
-                      const SizedBox(height: 70),
-                      const _NoResultsState(),
-                    ] else ...[
-                      if (_showMessages() && messageResults.isNotEmpty) ...[
-                        const _SectionLabel(
-                          icon: Icons.message_outlined,
-                          title: 'MESSAGES',
-                        ),
-                        const SizedBox(height: 12),
-                        ...groupedMessages.map(
-                          (group) => Padding(
-                            padding: const EdgeInsets.only(bottom: 18),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
+      backgroundColor: _TetherSearchStyle.background,
+      body: Stack(
+        children: [
+          const _SearchBackgroundOrbs(),
+          SafeArea(
+            child: RefreshIndicator(
+              onRefresh: _refreshSearch,
+              color: _TetherSearchStyle.primary,
+              child: Column(
+                children: [
+                  _SearchHeader(
+                    controller: _searchController,
+                    hasQuery: _hasQuery,
+                    onChanged: _onSearchChanged,
+                    onSubmitted: (value) {
+                      _commitRecentSearch(value);
+                      _onSearchChanged(value);
+                    },
+                    onClear: () {
+                      _searchController.clear();
+                      _onSearchChanged('');
+                    },
+                    chips: _hasQuery
+                        ? SingleChildScrollView(
+                            scrollDirection: Axis.horizontal,
+                            child: Row(
                               children: [
-                                Text(
-                                  group.label,
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w700,
-                                    color: group.label == 'Today'
-                                        ? const Color(0xFF1274E7)
-                                        : const Color(0xFF64748B),
+                                _buildFilterChip('All', SearchFilter.all),
+                                const SizedBox(width: 8),
+                                _buildFilterChip(
+                                  'Messages',
+                                  SearchFilter.messages,
+                                ),
+                                const SizedBox(width: 8),
+                                _buildFilterChip('People', SearchFilter.people),
+                                const SizedBox(width: 8),
+                                _buildFilterChip(
+                                  'Circles',
+                                  SearchFilter.circles,
+                                ),
+                              ],
+                            ),
+                          )
+                        : null,
+                  ),
+                  Expanded(
+                    child: AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 240),
+                      switchInCurve: Curves.easeOutCubic,
+                      switchOutCurve: Curves.easeInCubic,
+                      child: ListView(
+                        key: ValueKey(
+                          '${_query}_${_activeFilter.name}_${hasResults}_body',
+                        ),
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        padding: const EdgeInsets.fromLTRB(16, 18, 16, 112),
+                        children: [
+                          if (!_hasQuery) ...[
+                            const SizedBox(height: 28),
+                            const _SearchIdleState(),
+                            const SizedBox(height: 30),
+                            if (_recentSearches.isNotEmpty) ...[
+                              const _SectionLabel(
+                                icon: Icons.history_rounded,
+                                title: 'RECENT SEARCHES',
+                                accent: false,
+                              ),
+                              const SizedBox(height: 12),
+                              ..._recentSearches.map(
+                                (search) => Padding(
+                                  padding: const EdgeInsets.only(bottom: 10),
+                                  child: _RecentSearchTile(
+                                    label: search,
+                                    onTap: () {
+                                      _searchController.text = search;
+                                      _commitRecentSearch(search);
+                                      _onSearchChanged(search);
+                                    },
                                   ),
                                 ),
-                                const SizedBox(height: 10),
-                                ...group.items.map(
-                                  (result) => Padding(
-                                    padding: const EdgeInsets.only(bottom: 10),
-                                    child: _MessageResultCard(
-                                      result: result,
-                                      query: _query,
-                                      dateLabel: _messageDateTimeLabel(
-                                        result.createdAt,
+                              ),
+                            ],
+                          ] else if (!hasResults &&
+                              !linksProvider.isLoading &&
+                              !directProvider.isLoading &&
+                              !circlesProvider.isLoading) ...[
+                            const SizedBox(height: 68),
+                            const _NoResultsState(),
+                          ] else ...[
+                            if (_showMessages() &&
+                                messageResults.isNotEmpty) ...[
+                              const _SectionLabel(
+                                icon: Icons.chat_bubble_outline_rounded,
+                                title: 'MESSAGES',
+                                accent: true,
+                              ),
+                              const SizedBox(height: 12),
+                              ...groupedMessages.map(
+                                (group) => Padding(
+                                  padding: const EdgeInsets.only(bottom: 18),
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Padding(
+                                        padding: const EdgeInsets.only(
+                                          left: 2,
+                                          bottom: 10,
+                                        ),
+                                        child: Text(
+                                          group.label,
+                                          style: TextStyle(
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.w800,
+                                            color: group.label == 'Today'
+                                                ? _TetherSearchStyle.primary
+                                                : const Color(0xFF667085),
+                                          ),
+                                        ),
                                       ),
-                                      onTap: () async {
+                                      ...group.items.map(
+                                        (result) => Padding(
+                                          padding: const EdgeInsets.only(
+                                            bottom: 10,
+                                          ),
+                                          child: _AnimatedResultEntry(
+                                            child: _MessageResultCard(
+                                              result: result,
+                                              query: _query,
+                                              dateLabel: _messageDateTimeLabel(
+                                                result.createdAt,
+                                              ),
+                                              onTap: () async {
+                                                _commitRecentSearch(_query);
+                                                await _openConversationFromSearch(
+                                                  result.conversation,
+                                                );
+                                              },
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ],
+                            if (_showPeople() && peopleResults.isNotEmpty) ...[
+                              const _SectionLabel(
+                                icon: Icons.people_outline_rounded,
+                                title: 'PEOPLE',
+                                accent: true,
+                              ),
+                              const SizedBox(height: 12),
+                              ...peopleResults.map(
+                                (result) => Padding(
+                                  padding: const EdgeInsets.only(bottom: 10),
+                                  child: _AnimatedResultEntry(
+                                    child: _PersonResultCard(
+                                      result: result,
+                                      displayName: _displayNameFromLinkUser(
+                                        result.user,
+                                      ),
+                                      onMessage: () {
                                         _commitRecentSearch(_query);
-                                        await _openConversationFromSearch(
-                                          result.conversation,
+                                        _openDirectChat(result.user);
+                                      },
+                                      onAdd: () =>
+                                          _sendLinkRequest(result.user),
+                                      onAccept: () =>
+                                          _acceptIncomingRequest(result),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                            if (_showCircles() &&
+                                circleResults.isNotEmpty) ...[
+                              const SizedBox(height: 2),
+                              const _SectionLabel(
+                                icon: Icons.blur_circular_rounded,
+                                title: 'CIRCLES',
+                                accent: true,
+                              ),
+                              const SizedBox(height: 12),
+                              ...circleResults.map(
+                                (circle) => Padding(
+                                  padding: const EdgeInsets.only(bottom: 10),
+                                  child: _AnimatedResultEntry(
+                                    child: _CircleResultCard(
+                                      circle: circle,
+                                      onTap: () {
+                                        _commitRecentSearch(_query);
+                                        Navigator.push(
+                                          context,
+                                          MaterialPageRoute(
+                                            builder: (_) =>
+                                                ChatScreen(circle: circle),
+                                          ),
                                         );
                                       },
                                     ),
                                   ),
                                 ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
-                      if (_showPeople() && peopleResults.isNotEmpty) ...[
-                        const _SectionLabel(
-                          icon: Icons.people_outline_rounded,
-                          title: 'PEOPLE',
-                        ),
-                        const SizedBox(height: 12),
-                        ...peopleResults.map(
-                          (result) => Padding(
-                            padding: const EdgeInsets.only(bottom: 10),
-                            child: _PersonResultCard(
-                              result: result,
-                              displayName: _displayNameFromLinkUser(
-                                result.user,
                               ),
-                              onMessage: () {
-                                _commitRecentSearch(_query);
-                                _openDirectChat(result.user);
-                              },
-                              onAdd: () => _sendLinkRequest(result.user),
-                              onAccept: () => _acceptIncomingRequest(result),
-                            ),
-                          ),
-                        ),
-                      ],
-                      if (_showCircles() && circleResults.isNotEmpty) ...[
-                        const SizedBox(height: 2),
-                        const _SectionLabel(
-                          icon: Icons.blur_circular_rounded,
-                          title: 'CIRCLES',
-                        ),
-                        const SizedBox(height: 12),
-                        ...circleResults.map(
-                          (circle) => Padding(
-                            padding: const EdgeInsets.only(bottom: 10),
-                            child: _CircleResultCard(
-                              circle: circle,
-                              onTap: () {
-                                _commitRecentSearch(_query);
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (_) => ChatScreen(circle: circle),
-                                  ),
-                                );
-                              },
-                            ),
-                          ),
-                        ),
-                      ],
-                      if (linksProvider.isLoading &&
-                          _activeFilter == SearchFilter.people)
-                        const Padding(
-                          padding: EdgeInsets.only(top: 8),
-                          child: Center(child: CircularProgressIndicator()),
-                        ),
-                    ],
-                  ],
-                ),
+                            ],
+                            if (linksProvider.isLoading &&
+                                _activeFilter == SearchFilter.people)
+                              const Padding(
+                                padding: EdgeInsets.only(top: 8),
+                                child: Center(
+                                  child: CircularProgressIndicator(),
+                                ),
+                              ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
-        ),
+        ],
       ),
     );
   }
@@ -842,25 +819,244 @@ class _GroupedMessageResults {
   const _GroupedMessageResults({required this.label, required this.items});
 }
 
+class _TetherSearchStyle {
+  static const Color background = Color(0xFFFBFCFF);
+  static const Color primary = Color(0xFF6F63F6);
+  static const Color secondary = Color(0xFFD96BEF);
+  static const Color teal = Color(0xFF11C5B7);
+  static const Color ink = Color(0xFF101828);
+  static const Color muted = Color(0xFF667085);
+
+  static const LinearGradient primaryGradient = LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [Color(0xFF6F63F6), Color(0xFFD96BEF)],
+  );
+
+  static List<BoxShadow> get cardShadow => [
+        BoxShadow(
+          color: const Color(0xFF6F63F6).withOpacity(0.07),
+          blurRadius: 24,
+          offset: const Offset(0, 12),
+        ),
+        BoxShadow(
+          color: Colors.black.withOpacity(0.03),
+          blurRadius: 8,
+          offset: const Offset(0, 2),
+        ),
+      ];
+
+  static List<BoxShadow> get glowShadow => [
+        BoxShadow(
+          color: const Color(0xFFD96BEF).withOpacity(0.28),
+          blurRadius: 18,
+          offset: const Offset(0, 8),
+        ),
+      ];
+}
+
+class _SearchBackgroundOrbs extends StatelessWidget {
+  const _SearchBackgroundOrbs();
+
+  @override
+  Widget build(BuildContext context) {
+    return IgnorePointer(
+      child: Stack(
+        children: [
+          Positioned(
+            top: -80,
+            right: -80,
+            child: _Orb(
+              size: 210,
+              color: _TetherSearchStyle.primary.withOpacity(0.10),
+            ),
+          ),
+          Positioned(
+            top: 260,
+            left: -120,
+            child: _Orb(
+              size: 230,
+              color: _TetherSearchStyle.secondary.withOpacity(0.09),
+            ),
+          ),
+          Positioned(
+            right: -90,
+            bottom: 70,
+            child: _Orb(
+              size: 210,
+              color: _TetherSearchStyle.primary.withOpacity(0.12),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _Orb extends StatelessWidget {
+  final double size;
+  final Color color;
+
+  const _Orb({required this.size, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return TweenAnimationBuilder<double>(
+      duration: const Duration(milliseconds: 900),
+      tween: Tween(begin: 0.92, end: 1),
+      curve: Curves.easeOutCubic,
+      builder: (context, value, child) {
+        return Transform.scale(scale: value, child: child);
+      },
+      child: Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(shape: BoxShape.circle, color: color),
+      ),
+    );
+  }
+}
+
+class _SearchHeader extends StatelessWidget {
+  final TextEditingController controller;
+  final bool hasQuery;
+  final ValueChanged<String> onChanged;
+  final ValueChanged<String> onSubmitted;
+  final VoidCallback onClear;
+  final Widget? chips;
+
+  const _SearchHeader({
+    required this.controller,
+    required this.hasQuery,
+    required this.onChanged,
+    required this.onSubmitted,
+    required this.onClear,
+    required this.chips,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(18, 18, 18, 16),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.92),
+        border: const Border(bottom: BorderSide(color: Color(0xFFE9EAF5))),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.03),
+            blurRadius: 16,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          const Text(
+            'Search',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 28,
+              fontWeight: FontWeight.w900,
+              letterSpacing: -0.5,
+              color: _TetherSearchStyle.ink,
+            ),
+          ),
+          const SizedBox(height: 18),
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 220),
+            curve: Curves.easeOutCubic,
+            decoration: BoxDecoration(
+              color: const Color(0xFFF5F6FB),
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(
+                color: hasQuery
+                    ? _TetherSearchStyle.primary.withOpacity(0.45)
+                    : Colors.transparent,
+                width: 1.5,
+              ),
+              boxShadow: hasQuery
+                  ? [
+                      BoxShadow(
+                        color: _TetherSearchStyle.primary.withOpacity(0.14),
+                        blurRadius: 18,
+                        offset: const Offset(0, 7),
+                      ),
+                    ]
+                  : null,
+            ),
+            child: TextField(
+              controller: controller,
+              onChanged: onChanged,
+              onSubmitted: onSubmitted,
+              textInputAction: TextInputAction.search,
+              decoration: InputDecoration(
+                hintText: 'Search people, circles, messages...',
+                hintStyle: const TextStyle(color: Color(0xFF667085)),
+                prefixIcon: const Icon(
+                  Icons.search_rounded,
+                  color: _TetherSearchStyle.primary,
+                ),
+                suffixIcon: hasQuery
+                    ? IconButton(
+                        onPressed: onClear,
+                        icon: const Icon(
+                          Icons.close_rounded,
+                          color: Color(0xFF667085),
+                        ),
+                      )
+                    : null,
+                border: InputBorder.none,
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 18,
+                ),
+              ),
+            ),
+          ),
+          AnimatedSwitcher(
+            duration: const Duration(milliseconds: 220),
+            child: chips == null
+                ? const SizedBox.shrink()
+                : Padding(
+                    padding: const EdgeInsets.only(top: 14),
+                    child: chips!,
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _SectionLabel extends StatelessWidget {
   final IconData icon;
   final String title;
+  final bool accent;
 
-  const _SectionLabel({required this.icon, required this.title});
+  const _SectionLabel({
+    required this.icon,
+    required this.title,
+    required this.accent,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Row(
       children: [
-        Icon(icon, size: 16, color: const Color(0xFF64748B)),
+        Icon(
+          icon,
+          size: 16,
+          color: accent ? _TetherSearchStyle.primary : _TetherSearchStyle.muted,
+        ),
         const SizedBox(width: 8),
         Text(
           title,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 12,
             letterSpacing: 0.8,
-            fontWeight: FontWeight.w800,
-            color: Color(0xFF64748B),
+            fontWeight: FontWeight.w900,
+            color:
+                accent ? _TetherSearchStyle.primary : _TetherSearchStyle.muted,
           ),
         ),
       ],
@@ -873,32 +1069,46 @@ class _SearchIdleState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Container(
-          width: 92,
-          height: 92,
-          decoration: BoxDecoration(
-            color: const Color(0xFF1274E7).withOpacity(0.08),
-            shape: BoxShape.circle,
+    return TweenAnimationBuilder<double>(
+      duration: const Duration(milliseconds: 550),
+      tween: Tween(begin: 0.92, end: 1),
+      curve: Curves.easeOutBack,
+      builder: (context, scale, child) {
+        return Transform.scale(scale: scale, child: child);
+      },
+      child: Column(
+        children: [
+          Container(
+            width: 104,
+            height: 104,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: LinearGradient(
+                colors: [
+                  _TetherSearchStyle.primary.withOpacity(0.18),
+                  _TetherSearchStyle.secondary.withOpacity(0.16),
+                ],
+              ),
+              boxShadow: _TetherSearchStyle.glowShadow,
+            ),
+            child: const Icon(
+              Icons.search_rounded,
+              size: 46,
+              color: _TetherSearchStyle.primary,
+            ),
           ),
-          child: const Icon(
-            Icons.search_rounded,
-            size: 42,
-            color: Color(0xFF1274E7),
+          const SizedBox(height: 22),
+          const Text(
+            'Search messages, people, and circles',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 15.5,
+              color: _TetherSearchStyle.muted,
+              fontWeight: FontWeight.w600,
+            ),
           ),
-        ),
-        const SizedBox(height: 18),
-        const Text(
-          'Search messages, people, and circles',
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            fontSize: 15,
-            color: Color(0xFF64748B),
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }
@@ -911,36 +1121,43 @@ class _RecentSearchTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(18),
+    return _LiftCard(
+      borderRadius: 20,
       child: InkWell(
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(20),
         onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: const Color(0xFFE2E8F0)),
-          ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 15),
           child: Row(
             children: [
-              const Icon(Icons.history_rounded, color: Color(0xFF64748B)),
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: _TetherSearchStyle.primary.withOpacity(0.10),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.history_rounded,
+                  color: _TetherSearchStyle.primary,
+                  size: 19,
+                ),
+              ),
               const SizedBox(width: 12),
               Expanded(
                 child: Text(
                   label,
                   style: const TextStyle(
                     fontSize: 14.5,
-                    color: Color(0xFF0F172A),
-                    fontWeight: FontWeight.w500,
+                    color: _TetherSearchStyle.ink,
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
               ),
               const Icon(
                 Icons.arrow_forward_rounded,
                 size: 18,
-                color: Color(0xFF94A3B8),
+                color: Color(0xFF98A2B3),
               ),
             ],
           ),
@@ -958,32 +1175,37 @@ class _NoResultsState extends StatelessWidget {
     return Column(
       children: [
         Container(
-          width: 72,
-          height: 72,
+          width: 82,
+          height: 82,
           decoration: BoxDecoration(
-            color: const Color(0xFFEFF4F8),
+            gradient: LinearGradient(
+              colors: [
+                const Color(0xFFF1F3FA),
+                _TetherSearchStyle.secondary.withOpacity(0.10),
+              ],
+            ),
             shape: BoxShape.circle,
           ),
           child: const Icon(
             Icons.search_off_rounded,
-            size: 34,
-            color: Color(0xFF94A3B8),
+            size: 38,
+            color: Color(0xFF98A2B3),
           ),
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 18),
         const Text(
           'No results found',
           style: TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.w800,
-            color: Color(0xFF0F172A),
+            fontSize: 20,
+            fontWeight: FontWeight.w900,
+            color: _TetherSearchStyle.ink,
           ),
         ),
         const SizedBox(height: 8),
         const Text(
-          'Try searching for something else',
+          'Try a different name, username, circle, or message keyword.',
           textAlign: TextAlign.center,
-          style: TextStyle(fontSize: 14.5, color: Color(0xFF64748B)),
+          style: TextStyle(fontSize: 14.5, color: _TetherSearchStyle.muted),
         ),
       ],
     );
@@ -1012,34 +1234,21 @@ class _MessageResultCard extends StatelessWidget {
         ? otherUser.displayName!
         : otherUser.username;
 
-    return Material(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(22),
+    return _LiftCard(
       child: InkWell(
-        borderRadius: BorderRadius.circular(22),
+        borderRadius: BorderRadius.circular(24),
         onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(22),
-            border: Border.all(color: const Color(0xFFE2E8F0)),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.03),
-                blurRadius: 14,
-                offset: const Offset(0, 4),
-              ),
-            ],
-          ),
+        child: Padding(
+          padding: const EdgeInsets.all(15),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               AppAvatar(
                 name: result.senderFallbackName,
                 avatarUrl: result.senderAvatarUrl,
-                radius: 24,
+                radius: 25,
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 13),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -1053,38 +1262,21 @@ class _MessageResultCard extends StatelessWidget {
                             overflow: TextOverflow.ellipsis,
                             style: const TextStyle(
                               fontSize: 16,
-                              fontWeight: FontWeight.w800,
-                              color: Color(0xFF0F172A),
+                              fontWeight: FontWeight.w900,
+                              color: _TetherSearchStyle.ink,
                             ),
                           ),
                         ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 4,
-                          ),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF1274E7).withOpacity(0.10),
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: const Text(
-                            'DM',
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w700,
-                              color: Color(0xFF1274E7),
-                            ),
-                          ),
-                        ),
+                        const _MiniTag(label: 'DM'),
                       ],
                     ),
-                    const SizedBox(height: 3),
+                    const SizedBox(height: 4),
                     Text(
                       'Direct message · $conversationName',
                       style: const TextStyle(
                         fontSize: 12.5,
-                        color: Color(0xFF64748B),
-                        fontWeight: FontWeight.w500,
+                        color: _TetherSearchStyle.muted,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
                     const SizedBox(height: 10),
@@ -1094,8 +1286,8 @@ class _MessageResultCard extends StatelessWidget {
                       dateLabel,
                       style: const TextStyle(
                         fontSize: 12.5,
-                        color: Color(0xFF64748B),
-                        fontWeight: FontWeight.w500,
+                        color: _TetherSearchStyle.muted,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
                   ],
@@ -1135,6 +1327,7 @@ class _PersonResultCard extends StatelessWidget {
       case 'contact':
         trailing = _ActionButton(
           label: 'Message',
+          icon: Icons.chat_bubble_outline_rounded,
           onTap: onMessage,
           filled: true,
         );
@@ -1145,61 +1338,57 @@ class _PersonResultCard extends StatelessWidget {
       case 'incoming_pending':
         trailing = _ActionButton(
           label: 'Accept',
+          icon: Icons.check_rounded,
           onTap: onAccept,
           filled: true,
         );
         break;
       default:
-        trailing = _ActionButton(label: 'Add', onTap: onAdd, filled: true);
+        trailing = _ActionButton(
+          label: 'Add',
+          icon: Icons.person_add_alt_1_rounded,
+          onTap: onAdd,
+          filled: true,
+        );
     }
 
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.03),
-            blurRadius: 14,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          AppAvatar(
-            name: displayName,
-            avatarUrl: result.user.avatarUrl,
-            radius: 24,
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  displayName,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w800,
-                    color: Color(0xFF0F172A),
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  '@${result.user.username}',
-                  style: const TextStyle(
-                    fontSize: 13.5,
-                    color: Color(0xFF64748B),
-                  ),
-                ),
-              ],
+    return _LiftCard(
+      child: Padding(
+        padding: const EdgeInsets.all(15),
+        child: Row(
+          children: [
+            AppAvatar(
+              name: displayName,
+              avatarUrl: result.user.avatarUrl,
+              radius: 25,
             ),
-          ),
-          trailing,
-        ],
+            const SizedBox(width: 13),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    displayName,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w900,
+                      color: _TetherSearchStyle.ink,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '@${result.user.username}',
+                    style: const TextStyle(
+                      fontSize: 13.5,
+                      color: _TetherSearchStyle.muted,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            trailing,
+          ],
+        ),
       ),
     );
   }
@@ -1216,29 +1405,16 @@ class _CircleResultCard extends StatelessWidget {
     final memberCount =
         circle.messageCount?.members ?? circle.members?.length ?? 0;
 
-    return Material(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(22),
+    return _LiftCard(
       child: InkWell(
-        borderRadius: BorderRadius.circular(22),
+        borderRadius: BorderRadius.circular(24),
         onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(22),
-            border: Border.all(color: const Color(0xFFE2E8F0)),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.03),
-                blurRadius: 14,
-                offset: const Offset(0, 4),
-              ),
-            ],
-          ),
+        child: Padding(
+          padding: const EdgeInsets.all(15),
           child: Row(
             children: [
               _CircleClusterAvatar(seed: circle.name),
-              const SizedBox(width: 12),
+              const SizedBox(width: 13),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -1247,8 +1423,8 @@ class _CircleResultCard extends StatelessWidget {
                       circle.name,
                       style: const TextStyle(
                         fontSize: 16,
-                        fontWeight: FontWeight.w800,
-                        color: Color(0xFF0F172A),
+                        fontWeight: FontWeight.w900,
+                        color: _TetherSearchStyle.ink,
                       ),
                     ),
                     const SizedBox(height: 4),
@@ -1256,13 +1432,18 @@ class _CircleResultCard extends StatelessWidget {
                       '$memberCount member${memberCount == 1 ? '' : 's'}',
                       style: const TextStyle(
                         fontSize: 13.5,
-                        color: Color(0xFF64748B),
+                        color: _TetherSearchStyle.muted,
                       ),
                     ),
                   ],
                 ),
               ),
-              _ActionButton(label: 'Open', onTap: onTap, filled: false),
+              _ActionButton(
+                label: 'Open',
+                icon: Icons.arrow_forward_rounded,
+                onTap: onTap,
+                filled: false,
+              ),
             ],
           ),
         ),
@@ -1271,13 +1452,63 @@ class _CircleResultCard extends StatelessWidget {
   }
 }
 
+class _LiftCard extends StatelessWidget {
+  final Widget child;
+  final double borderRadius;
+
+  const _LiftCard({required this.child, this.borderRadius = 24});
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.white.withOpacity(0.96),
+      borderRadius: BorderRadius.circular(borderRadius),
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(borderRadius),
+          border: Border.all(color: const Color(0xFFE7E9F5)),
+          boxShadow: _TetherSearchStyle.cardShadow,
+        ),
+        child: child,
+      ),
+    );
+  }
+}
+
+class _AnimatedResultEntry extends StatelessWidget {
+  final Widget child;
+
+  const _AnimatedResultEntry({required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    return TweenAnimationBuilder<double>(
+      duration: const Duration(milliseconds: 320),
+      tween: Tween(begin: 0, end: 1),
+      curve: Curves.easeOutCubic,
+      builder: (context, value, child) {
+        return Opacity(
+          opacity: value,
+          child: Transform.translate(
+            offset: Offset(0, 14 * (1 - value)),
+            child: child,
+          ),
+        );
+      },
+      child: child,
+    );
+  }
+}
+
 class _ActionButton extends StatelessWidget {
   final String label;
+  final IconData icon;
   final VoidCallback onTap;
   final bool filled;
 
   const _ActionButton({
     required this.label,
+    required this.icon,
     required this.onTap,
     required this.filled,
   });
@@ -1286,21 +1517,33 @@ class _ActionButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         decoration: BoxDecoration(
-          color: filled
-              ? const Color(0xFF1274E7).withOpacity(0.10)
-              : const Color(0xFF11C5B7).withOpacity(0.10),
-          borderRadius: BorderRadius.circular(14),
+          gradient: filled ? _TetherSearchStyle.primaryGradient : null,
+          color: filled ? null : _TetherSearchStyle.primary.withOpacity(0.10),
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: filled ? _TetherSearchStyle.glowShadow : null,
         ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.w700,
-            color: filled ? const Color(0xFF1274E7) : const Color(0xFF0F766E),
-          ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              icon,
+              size: 16,
+              color: filled ? Colors.white : _TetherSearchStyle.primary,
+            ),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 13.5,
+                fontWeight: FontWeight.w800,
+                color: filled ? Colors.white : _TetherSearchStyle.primary,
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -1317,15 +1560,40 @@ class _StatusBadge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
       decoration: BoxDecoration(
-        color: const Color(0xFFF4F4F5),
+        color: const Color(0xFFF1F3FA),
         borderRadius: BorderRadius.circular(999),
       ),
       child: Text(
         text,
         style: const TextStyle(
           fontSize: 13,
-          fontWeight: FontWeight.w700,
-          color: Color(0xFF64748B),
+          fontWeight: FontWeight.w800,
+          color: _TetherSearchStyle.muted,
+        ),
+      ),
+    );
+  }
+}
+
+class _MiniTag extends StatelessWidget {
+  final String label;
+
+  const _MiniTag({required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+      decoration: BoxDecoration(
+        color: _TetherSearchStyle.primary.withOpacity(0.10),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Text(
+        label,
+        style: const TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w900,
+          color: _TetherSearchStyle.primary,
         ),
       ),
     );
@@ -1348,7 +1616,7 @@ class _HighlightedText extends StatelessWidget {
         style: const TextStyle(
           fontSize: 14.5,
           height: 1.45,
-          color: Color(0xFF0F172A),
+          color: _TetherSearchStyle.ink,
         ),
       );
     }
@@ -1366,7 +1634,7 @@ class _HighlightedText extends StatelessWidget {
         style: const TextStyle(
           fontSize: 14.5,
           height: 1.45,
-          color: Color(0xFF0F172A),
+          color: _TetherSearchStyle.ink,
         ),
       );
     }
@@ -1380,7 +1648,7 @@ class _HighlightedText extends StatelessWidget {
           TextSpan(
             text: text.substring(lastIndex, match.start),
             style: const TextStyle(
-              color: Color(0xFF0F172A),
+              color: _TetherSearchStyle.ink,
               fontWeight: FontWeight.w500,
             ),
           ),
@@ -1391,9 +1659,9 @@ class _HighlightedText extends StatelessWidget {
         TextSpan(
           text: text.substring(match.start, match.end),
           style: TextStyle(
-            color: const Color(0xFF0F172A),
-            fontWeight: FontWeight.w700,
-            backgroundColor: const Color(0xFF1274E7).withOpacity(0.18),
+            color: _TetherSearchStyle.ink,
+            fontWeight: FontWeight.w900,
+            backgroundColor: _TetherSearchStyle.secondary.withOpacity(0.22),
           ),
         ),
       );
@@ -1406,7 +1674,7 @@ class _HighlightedText extends StatelessWidget {
         TextSpan(
           text: text.substring(lastIndex),
           style: const TextStyle(
-            color: Color(0xFF0F172A),
+            color: _TetherSearchStyle.ink,
             fontWeight: FontWeight.w500,
           ),
         ),
@@ -1430,7 +1698,11 @@ class _CircleClusterAvatar extends StatelessWidget {
   const _CircleClusterAvatar({required this.seed});
 
   Color _colorForIndex(int index) {
-    const colors = [Color(0xFF11C5B7), Color(0xFF4F7DF3), Color(0xFF6E63F6)];
+    const colors = [
+      _TetherSearchStyle.teal,
+      Color(0xFF4F7DF3),
+      _TetherSearchStyle.primary,
+    ];
     return colors[index % colors.length];
   }
 
@@ -1473,6 +1745,24 @@ class _CircleClusterAvatar extends StatelessWidget {
               color: _colorForIndex(2),
             ),
           ),
+          Positioned(
+            right: 0,
+            bottom: 1,
+            child: Container(
+              width: 18,
+              height: 18,
+              decoration: BoxDecoration(
+                gradient: _TetherSearchStyle.primaryGradient,
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.white, width: 2),
+              ),
+              child: const Icon(
+                Icons.blur_circular_rounded,
+                color: Colors.white,
+                size: 10,
+              ),
+            ),
+          ),
         ],
       ),
     );
@@ -1494,13 +1784,20 @@ class _MiniCircle extends StatelessWidget {
         color: color,
         shape: BoxShape.circle,
         border: Border.all(color: Colors.white, width: 2),
+        boxShadow: [
+          BoxShadow(
+            color: color.withOpacity(0.22),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       alignment: Alignment.center,
       child: Text(
         label,
         style: const TextStyle(
           color: Colors.white,
-          fontWeight: FontWeight.w800,
+          fontWeight: FontWeight.w900,
           fontSize: 11,
         ),
       ),

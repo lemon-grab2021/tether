@@ -40,15 +40,17 @@ services:
       retries: 10
 
   clamav:
-    image: clamav/clamav:latest
+    image: clamav/clamav:stable
     ports: ["3310:3310"]
+    container_name: tether-clamav
     volumes: [clamav:/var/lib/clamav]
     healthcheck:
       test: ["CMD", "clamdcheck"]
       interval: 30s
       timeout: 10s
       retries: 5
-      start_period: 120s  # ClamAV takes a while to load its virus definitions
+      start_period: 120s
+    restart: unless-stopped  # ClamAV takes a while to load its virus definitions
 
 volumes:
   pg: {}

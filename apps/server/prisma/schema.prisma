@@ -238,39 +238,56 @@ enum ReportStatus {
 }
 
 model AuditLog {
-  id         Int      @id @default(autoincrement())
-  userId     Int?
+  id Int @id @default(autoincrement())
+
+  actorId    Int
   action     String
   entityType String
   entityId   String?
   metadata   Json?
-  createdAt  DateTime @default(now())
 
-  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+  hash      String?
+  createdAt DateTime @default(now())
 
-  @@index([userId])
-  @@index([action])
+  actor User? @relation(fields: [actorId], references: [id], onDelete: Cascade)
+
+  @@index([actorId])
+  @@index([action, createdAt])
   @@index([entityType])
+  @@index([hash])
 }
 
-enum UploadStatus {
+model MerkleRoot {
+  id        Int      @id @default(autoincrement())
+  rootHash  String
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+}
+
+enum FileUploadStatus {
   PENDING_UPLOAD
-  PENDING_SCAN
-  READY
-  REJECTED
+  UPLOADED
+  SCANNING
+  CLEAN
+  INFECTED
+  FAILED
 }
 
 model FileUpload {
-  id           Int          @id @default(autoincrement())
+  id           Int              @id @default(autoincrement())
   uploaderId   Int
-  objectKey    String       @unique
+  objectKey    String           @unique
   originalName String
   mimeType     String
   sizeBytes    Int
-  status       UploadStatus @default(PENDING_UPLOAD)
-  createdAt    DateTime     @default(now())
-  scannedAt    DateTime?
-  rejectedAt   DateTime?
+  status       FileUploadStatus @default(PENDING_UPLOAD)
+  createdAt    DateTime         @default(now())
+
+  scannedAt     DateTime?
+  rejectedAt    DateTime?
+  scanResult    String?
+  scanSignature String?
 
   uploader User @relation(fields: [uploaderId], references: [id], onDelete: Cascade)
 

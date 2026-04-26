@@ -15,28 +15,28 @@ import { ConversationCleanupService } from './conversation-cleanup.service';
 import { AuditLogModule } from './audit-log/audit-log.module';
 
 @Module({
-  imports: [
-    ConfigModule.forRoot({
-      isGlobal: true,
-    }),
-    ThrottlerModule.forRoot([
-      {
-        ttl: 60_000,
-        limit: 60,
-      },
-    ]),
-    PrismaModule,
-    ScheduleModule.forRoot(),
-    AuthModule,
-    UsersModule,
-    CirclesModule,
-    LinksModule,
-    DirectMessagesModule,
-    MessagesModule,
-    UploadsModule,
-    AuditLogModule,
-  ],
-  controllers: [],
-  providers: [ConversationCleanupService],
+    imports: [
+        ConfigModule.forRoot({
+            isGlobal: true,
+        }),
+        ThrottlerModule.forRoot([
+            {
+                ttl: 60_000,
+                limit: 60,
+            },
+        ]),
+        PrismaModule,
+        ScheduleModule.forRoot(),
+        AuthModule,
+        UsersModule,
+        CirclesModule,
+        LinksModule,
+        DirectMessagesModule,
+        MessagesModule,
+        UploadsModule,
+        AuditLogModule,
+    ],
+    controllers: [],
+    providers: [ConversationCleanupService],
 })
-export class AppModule {}
+export class AppModule { }

@@ -1,22 +1,22 @@
-import { IsString, IsInt, IsIn, Min, Max } from 'class-validator';
+import {
+  IsInt,
+  IsNotEmpty,
+  IsString,
+  MaxLength,
+  Min,
+} from 'class-validator';
 
 export class RequestUploadDto {
   @IsString()
+  @IsNotEmpty()
+  @MaxLength(255)
   filename!: string;
 
   @IsString()
-  @IsIn([
-    'image/jpeg',
-    'image/png',
-    'image/gif',
-    'image/webp',
-    'video/mp4',
-    'application/pdf',
-  ])
+  @IsNotEmpty()
   mimeType!: string;
 
   @IsInt()
   @Min(1)
-  @Max(10485760) // 10MB max
   fileSize!: number;
 }

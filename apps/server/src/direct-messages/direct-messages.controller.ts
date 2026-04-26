@@ -16,7 +16,7 @@ import {
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { DirectMessagesService } from './direct-messages.service';
 import { CreateDirectConversationDto } from './dto/create-direct-message.dto';
-import { SendDirectMessageDto } from './dto/send-direct-messages.dto';
+import { SendDirectMessageBodyDto } from './dto/send-direct-message-body.dto';
 import { UpdateMessageDto } from 'src/auth/dto/update-message.dto';
 import { DirectMessagesGateway } from './direct-messages.gateway';
 
@@ -26,7 +26,7 @@ export class DirectMessagesController {
   constructor(
     private readonly directMessagesService: DirectMessagesService,
     private readonly directMessagesGateway: DirectMessagesGateway,
-  ) {}
+  ) { }
 
   @Post()
   async createOrGetConversation(
@@ -61,15 +61,13 @@ export class DirectMessagesController {
   async sendMessage(
     @Request() req: any,
     @Param('conversationId', ParseIntPipe) conversationId: number,
-    @Body() body: { body?: string; mediaUrl?: string },
+    @Body() body: SendDirectMessageBodyDto,
   ) {
-    const dto: SendDirectMessageDto = {
+    return this.directMessagesService.sendMessage(req.user.id, {
       conversationId,
       body: body.body,
       mediaUrl: body.mediaUrl,
-    };
-
-    return this.directMessagesService.sendMessage(req.user.id, dto);
+    });
   }
 
   @Patch(':conversationId/messages/:messageId')
@@ -115,6 +113,13 @@ export class DirectMessagesController {
     );
   }
 
+  @Get('deleted/list')
+  async getDeletedConversations(@Req() req: any) {
+    return this.directMessagesService.getDeletedConversationsForUser(
+      req.userId,
+    );
+  }
+
   @Get(':conversationId')
   async getConversationById(
     @Request() req: any,
@@ -129,28 +134,21 @@ export class DirectMessagesController {
   @Delete(':conversationId')
   async deleteConversation(
     @Param('conversationId', ParseIntPipe) conversationId: number,
-    @Req() req: any,
+    @Request() req: any,
   ) {
     return this.directMessagesService.deleteConversationForUser(
       conversationId,
-      req.userId,
+      req.user.id,
     );
   }
 
   @Post(':conversationId/restore')
   async restoreConversation(
     @Param('conversationId', ParseIntPipe) conversationId: number,
-    @Req() req: any,
+    @Request() req: any,
   ) {
     return this.directMessagesService.restoreConversationForUser(
       conversationId,
-      req.userId,
-    );
-  }
-
-  @Get('deleted/list')
-  async getDeletedConversations(@Req() req: any) {
-    return this.directMessagesService.getDeletedConversationsForUser(
       req.userId,
     );
   }

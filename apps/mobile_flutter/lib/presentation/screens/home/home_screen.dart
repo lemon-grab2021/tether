@@ -7,7 +7,6 @@ import '../../../providers/circles_provider.dart';
 import '../../../providers/direct_conversations_provider.dart';
 import '../../../providers/direct_messages_provider.dart';
 import '../../../providers/deleted_conversations_provider.dart';
-import '../../../data/models/direct_conversation.dart';
 
 import '../chat/chat_screen.dart';
 import '../chat/direct_chat_screen.dart';
@@ -44,8 +43,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
       final authProvider = context.read<AuthProvider>();
       final circlesProvider = context.read<CirclesProvider>();
-      final directConversationsProvider = context
-          .read<DirectConversationsProvider>();
+      final directConversationsProvider =
+          context.read<DirectConversationsProvider>();
 
       circlesProvider.loadCircles();
 
@@ -91,46 +90,11 @@ class _HomeScreenState extends State<HomeScreen> {
     widget.onOpenSearchTab?.call();
   }
 
-  Future<void> _openDirectConversation(DirectConversation conversation) async {
-  final authProvider = context.read<AuthProvider>();
-  final directConversationsProvider = context.read<DirectConversationsProvider>();
-
-  final currentUserId = authProvider.user?.id;
-  if (currentUserId == null) return;
-
-  await directConversationsProvider.loadConversations(
-    currentUserId: currentUserId,
-  );
-
-  if (!mounted) return;
-
-  final freshConversation = directConversationsProvider.conversations.firstWhere(
-    (c) => c.id == conversation.id,
-    orElse: () => conversation,
-  );
-
-  await Navigator.push(
-    context,
-    MaterialPageRoute(
-      builder: (_) => ChangeNotifierProvider(
-        create: (_) => DirectMessagesProvider(),
-        child: DirectChatScreen(conversation: freshConversation),
-      ),
-    ),
-  );
-
-  if (!mounted) return;
-
-  await directConversationsProvider.loadConversations(
-    currentUserId: currentUserId,
-  );
-}
-
   Future<void> _refreshHome() async {
     final authProvider = context.read<AuthProvider>();
     final circlesProvider = context.read<CirclesProvider>();
-    final directConversationsProvider = context
-        .read<DirectConversationsProvider>();
+    final directConversationsProvider =
+        context.read<DirectConversationsProvider>();
 
     await circlesProvider.loadCircles();
 
@@ -152,6 +116,13 @@ class _HomeScreenState extends State<HomeScreen> {
     if (diff.inHours < 24) return '${diff.inHours}h';
     if (diff.inDays < 7) return '${diff.inDays}d';
     return '${value.day}/${value.month}';
+  }
+
+  String _getGreeting() {
+    final hour = DateTime.now().hour;
+    if (hour < 12) return 'Good morning,';
+    if (hour < 18) return 'Good afternoon,';
+    return 'Good evening,';
   }
 
   bool _isUnreadForCurrentUser({
@@ -199,14 +170,14 @@ class _HomeScreenState extends State<HomeScreen> {
       final name =
           (otherUser.displayName != null &&
               otherUser.displayName!.trim().isNotEmpty)
-          ? otherUser.displayName!
+          ? otherUser.displayName!.trim()
           : otherUser.username;
 
       final preview = conversation.lastMessage?.body?.trim().isNotEmpty == true
           ? conversation.lastMessage!.body!
           : conversation.lastMessage?.mediaUrl != null
-          ? 'Sent an attachment'
-          : 'Start your conversation';
+              ? 'Sent an attachment'
+              : 'Start your conversation';
 
       final isUnread = currentUserId == null
           ? false
@@ -217,12 +188,13 @@ class _HomeScreenState extends State<HomeScreen> {
 
       items.add(
         _InboxItem(
+          type: _InboxItemType.direct,
           sortAt:
               conversation.lastMessage?.createdAt ?? conversation.lastMessageAt,
           leading: AppAvatar(
             name: name,
             avatarUrl: otherUser.avatarUrl,
-            radius: 24,
+            radius: 26,
           ),
           title: name,
           subtitle: preview,
@@ -231,7 +203,19 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           badgeCount: isUnread ? 1 : null,
           subtitleBold: isUnread,
-          onTap: () => _openDirectConversation(conversation),
+          isTyping: false,
+          memberCount: null,
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => ChangeNotifierProvider(
+                  create: (_) => DirectMessagesProvider(),
+                  child: DirectChatScreen(conversation: conversation),
+                ),
+              ),
+            );
+          },
         ),
       );
     }
@@ -241,11 +225,12 @@ class _HomeScreenState extends State<HomeScreen> {
     )) {
       final preview =
           (circle.description != null && circle.description!.trim().isNotEmpty)
-          ? circle.description!
-          : 'Circle conversation';
+              ? circle.description!
+              : 'Circle conversation';
 
       items.add(
         _InboxItem(
+          type: _InboxItemType.circle,
           sortAt: circle.updatedAt,
           leading: _CircleClusterAvatar(seed: circle.name),
           title: circle.name,
@@ -253,6 +238,8 @@ class _HomeScreenState extends State<HomeScreen> {
           timeLabel: _formatRelativeTime(circle.updatedAt),
           badgeCount: null,
           subtitleBold: false,
+          isTyping: false,
+          memberCount: null,
           onTap: () {
             Navigator.push(
               context,
@@ -272,14 +259,14 @@ class _HomeScreenState extends State<HomeScreen> {
     final authProvider = context.watch<AuthProvider>();
     final circlesProvider = context.watch<CirclesProvider>();
     final deletedProvider = context.watch<DeletedConversationsProvider>();
-    final directConversationsProvider = context
-        .watch<DirectConversationsProvider>();
+    final directConversationsProvider =
+        context.watch<DirectConversationsProvider>();
 
     final user = authProvider.user;
     final displayName =
         (user?.displayName != null && user!.displayName!.trim().isNotEmpty)
-        ? user.displayName!.trim()
-        : (user?.username ?? 'User');
+            ? user.displayName!.trim()
+            : (user?.username ?? 'User');
 
     final currentUserId = user?.id;
 
@@ -295,187 +282,141 @@ class _HomeScreenState extends State<HomeScreen> {
       currentUserId: currentUserId,
     );
 
+    final isInitialLoading =
+        (!directConversationsProvider.hasLoadedOnce &&
+                directConversationsProvider.conversations.isEmpty) &&
+            circlesProvider.isLoading &&
+            circlesProvider.circles.isEmpty;
+
+    final hasLoadError = inboxItems.isEmpty &&
+        (directConversationsProvider.error != null ||
+            circlesProvider.error != null);
+
     return Scaffold(
-      backgroundColor: const Color(0xFFF3F7FB),
-      appBar: AppBar(
-        backgroundColor: const Color(0xFFF3F7FB),
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        titleSpacing: 16,
-        title: Row(
-          children: [
-            Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                color: Colors.blue.shade50,
-                shape: BoxShape.circle,
-              ),
-              child: const Padding(
-                padding: EdgeInsets.all(7),
-                child: CustomPaint(
-                  painter: _TetherIconPainter(color: Color(0xFF1274E7)),
-                ),
+      backgroundColor: _TetherPalette.background,
+      body: Stack(
+        children: [
+          const _DecorativeBackground(),
+          SafeArea(
+            child: RefreshIndicator(
+              onRefresh: _refreshHome,
+              color: _TetherPalette.primary,
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  return SingleChildScrollView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    padding: const EdgeInsets.fromLTRB(18, 14, 18, 32),
+                    child: Center(
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 520),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _HomeHeader(
+                              hasNotifications: totalUnread > 0,
+                              onSearch: _openSearchTab,
+                              onNotifications: () {},
+                              onProfile: _openProfileTab,
+                            ),
+                            const SizedBox(height: 18),
+                            _WelcomeHeroCard(
+                              greeting: _getGreeting(),
+                              displayName: displayName,
+                              unreadCount: totalUnread,
+                            ),
+                            const SizedBox(height: 24),
+                            _QuickActionRow(
+                              onCreate: () {
+                                showModalBottomSheet(
+                                  context: context,
+                                  isScrollControlled: true,
+                                  backgroundColor: Colors.transparent,
+                                  builder: (_) => const CreateCircleDialog(),
+                                );
+                              },
+                              onJoin: () {
+                                showModalBottomSheet(
+                                  context: context,
+                                  isScrollControlled: true,
+                                  backgroundColor: Colors.transparent,
+                                  builder: (_) => const JoinCircleDialog(),
+                                );
+                              },
+                              onLinks: _openLinksTab,
+                            ),
+                            const SizedBox(height: 28),
+                            _SectionHeader(
+                              title: 'Recent Conversations',
+                              countLabel: '${inboxItems.length} active',
+                            ),
+                            const SizedBox(height: 14),
+                            if (isInitialLoading)
+                              const Padding(
+                                padding: EdgeInsets.symmetric(vertical: 42),
+                                child: Center(
+                                  child: CircularProgressIndicator(
+                                    color: _TetherPalette.primary,
+                                  ),
+                                ),
+                              )
+                            else if (hasLoadError)
+                              _MessageEmptyState(
+                                title: 'Could not load messages',
+                                subtitle: directConversationsProvider.error ??
+                                    circlesProvider.error ??
+                                    'Something went wrong.',
+                              )
+                            else if (inboxItems.isEmpty)
+                              const _MessageEmptyState(
+                                title: 'No messages yet',
+                                subtitle:
+                                    'Create a circle, join one, or start a conversation from Links.',
+                              )
+                            else
+                              ...List.generate(inboxItems.length, (index) {
+                                final item = inboxItems[index];
+                                return TweenAnimationBuilder<double>(
+                                  tween: Tween(begin: 0, end: 1),
+                                  duration: Duration(
+                                    milliseconds: 260 + (index * 35),
+                                  ),
+                                  curve: Curves.easeOutCubic,
+                                  builder: (context, value, child) {
+                                    return Opacity(
+                                      opacity: value,
+                                      child: Transform.translate(
+                                        offset: Offset(0, 16 * (1 - value)),
+                                        child: child,
+                                      ),
+                                    );
+                                  },
+                                  child: Padding(
+                                    padding: const EdgeInsets.only(bottom: 12),
+                                    child: _ConversationCard(
+                                      item: item,
+                                    ),
+                                  ),
+                                );
+                              }),
+                          ],
+                        ),
+                      ),
+                    ),
+                  );
+                },
               ),
             ),
-            const SizedBox(width: 15),
-            const Text(
-              'Tether',
-              style: TextStyle(
-                fontWeight: FontWeight.w800,
-                color: Color(0xFF0F172A),
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.search_rounded),
-            color: const Color(0xFF475569),
-            onPressed: _openSearchTab,
           ),
-          IconButton(
-            icon: const Icon(Icons.people_alt_outlined),
-            color: const Color(0xFF475569),
-            onPressed: _openLinksTab,
-          ),
-          IconButton(
-            icon: const Icon(Icons.account_circle_outlined),
-            color: const Color(0xFF475569),
-            onPressed: _openProfileTab,
-          ),
-          const SizedBox(width: 8),
         ],
-      ),
-      body: RefreshIndicator(
-        onRefresh: _refreshHome,
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
-          children: [
-            _WelcomeCard(displayName: displayName, unreadCount: totalUnread),
-            const SizedBox(height: 5),
-            Row(
-              children: [
-                Expanded(
-                  child: SizedBox(
-                    height: 80,
-                    child: _ActionTile(
-                      label: 'Create',
-                      icon: Icons.add,
-                      filled: true,
-                      onTap: () {
-                        showModalBottomSheet(
-                          context: context,
-                          isScrollControlled: true,
-                          backgroundColor: Colors.transparent,
-                          builder: (_) => const CreateCircleDialog(),
-                        );
-                      },
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: SizedBox(
-                    height: 80,
-                    child: _ActionTile(
-                      label: 'Join',
-                      icon: Icons.group_add_outlined,
-                      onTap: () {
-                        showModalBottomSheet(
-                          context: context,
-                          isScrollControlled: true,
-                          backgroundColor: Colors.transparent,
-                          builder: (_) => const JoinCircleDialog(),
-                        );
-                      },
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: SizedBox(
-                    height: 80,
-                    child: _ActionTile(
-                      label: 'Links',
-                      icon: Icons.link,
-                      onTap: _openLinksTab,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 22),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text(
-                  'MESSAGES',
-                  style: TextStyle(
-                    fontSize: 14,
-                    letterSpacing: 0.8,
-                    fontWeight: FontWeight.w800,
-                    color: Color(0xFF334155),
-                  ),
-                ),
-                Text(
-                  '${inboxItems.length}',
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                    color: Color(0xFF64748B),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 14),
-            if ((!directConversationsProvider.hasLoadedOnce &&
-                    directConversationsProvider.conversations.isEmpty) &&
-                circlesProvider.isLoading &&
-                circlesProvider.circles.isEmpty)
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 24),
-                child: Center(child: CircularProgressIndicator()),
-              )
-            else if (inboxItems.isEmpty &&
-                (directConversationsProvider.error != null ||
-                    circlesProvider.error != null))
-              _MessageEmptyState(
-                title: 'Could not load messages',
-                subtitle:
-                    directConversationsProvider.error ??
-                    circlesProvider.error ??
-                    'Something went wrong.',
-              )
-            else if (inboxItems.isEmpty)
-              const _MessageEmptyState(
-                title: 'No messages yet',
-                subtitle:
-                    'Create a circle, join one, or start a conversation from Links.',
-              )
-            else
-              ...inboxItems.map((item) {
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: _MessageCard(
-                    leading: item.leading,
-                    title: item.title,
-                    subtitle: item.subtitle,
-                    timeLabel: item.timeLabel,
-                    badgeCount: item.badgeCount,
-                    subtitleBold: item.subtitleBold,
-                    onTap: item.onTap,
-                  ),
-                );
-              }),
-          ],
-        ),
       ),
     );
   }
 }
 
+enum _InboxItemType { direct, circle }
+
 class _InboxItem {
+  final _InboxItemType type;
   final DateTime sortAt;
   final Widget leading;
   final String title;
@@ -483,9 +424,12 @@ class _InboxItem {
   final String timeLabel;
   final int? badgeCount;
   final bool subtitleBold;
+  final bool isTyping;
+  final int? memberCount;
   final VoidCallback onTap;
 
   const _InboxItem({
+    required this.type,
     required this.sortAt,
     required this.leading,
     required this.title,
@@ -494,102 +438,429 @@ class _InboxItem {
     required this.onTap,
     this.badgeCount,
     this.subtitleBold = false,
+    this.isTyping = false,
+    this.memberCount,
   });
 }
 
-class _WelcomeCard extends StatelessWidget {
-  final String displayName;
-  final int unreadCount;
+class _TetherPalette {
+  static const Color background = Color(0xFFFBFAFF);
+  static const Color surface = Color(0xFFFFFFFF);
+  static const Color text = Color(0xFF111827);
+  static const Color muted = Color(0xFF6B7280);
+  static const Color softMuted = Color(0xFF9CA3AF);
+  static const Color border = Color(0xFFECEAF8);
 
-  const _WelcomeCard({required this.displayName, required this.unreadCount});
+  static const Color primary = Color(0xFF6C5CFF);
+  static const Color primaryDark = Color(0xFF4F46E5);
+  static const Color accent = Color(0xFFD66BEE);
+  static const Color teal = Color(0xFF12B8B0);
+  static const Color green = Color(0xFF22C55E);
+
+  static const LinearGradient heroGradient = LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [
+      Color(0xFF5D5FEF),
+      Color(0xFF7B61FF),
+      Color(0xFFD76BEF),
+    ],
+  );
+
+  static const LinearGradient primaryGradient = LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [
+      Color(0xFF6C5CFF),
+      Color(0xFF7B61FF),
+    ],
+  );
+
+  static const LinearGradient accentGradient = LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [
+      Color(0xFFD66BEE),
+      Color(0xFFBD5FEA),
+    ],
+  );
+}
+
+class _DecorativeBackground extends StatelessWidget {
+  const _DecorativeBackground();
+
+  @override
+  Widget build(BuildContext context) {
+    return IgnorePointer(
+      child: Stack(
+        children: [
+          Positioned.fill(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    _TetherPalette.background,
+                    const Color(0xFFFFFFFF),
+                    _TetherPalette.primary.withOpacity(0.035),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          Positioned(
+            top: -120,
+            right: -120,
+            child: _BlurOrb(
+              size: 280,
+              color: _TetherPalette.primary.withOpacity(0.10),
+            ),
+          ),
+          Positioned(
+            top: 240,
+            left: -110,
+            child: _BlurOrb(
+              size: 230,
+              color: _TetherPalette.accent.withOpacity(0.10),
+            ),
+          ),
+          Positioned(
+            bottom: 120,
+            right: -90,
+            child: _BlurOrb(
+              size: 220,
+              color: _TetherPalette.primary.withOpacity(0.07),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _BlurOrb extends StatelessWidget {
+  final double size;
+  final Color color;
+
+  const _BlurOrb({
+    required this.size,
+    required this.color,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      constraints: const BoxConstraints(minHeight: 70),
-      padding: const EdgeInsets.fromLTRB(12, 9, 12, 9),
+      width: size,
+      height: size,
       decoration: BoxDecoration(
-        color: const Color(0xFFEAF4FF),
-        borderRadius: BorderRadius.circular(28),
+        shape: BoxShape.circle,
+        color: color,
+        boxShadow: [
+          BoxShadow(
+            color: color,
+            blurRadius: 80,
+            spreadRadius: 30,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _HomeHeader extends StatelessWidget {
+  final bool hasNotifications;
+  final VoidCallback onSearch;
+  final VoidCallback onNotifications;
+  final VoidCallback onProfile;
+
+  const _HomeHeader({
+    required this.hasNotifications,
+    required this.onSearch,
+    required this.onNotifications,
+    required this.onProfile,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        const _GradientLogoButton(),
+        const SizedBox(width: 12),
+        const Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Tether',
+                style: TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: -0.5,
+                  color: _TetherPalette.text,
+                ),
+              ),
+              SizedBox(height: 1),
+              Text(
+                'Stay connected',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: _TetherPalette.muted,
+                ),
+              ),
+            ],
+          ),
+        ),
+        _HeaderIconButton(
+          icon: Icons.search_rounded,
+          onPressed: onSearch,
+        ),
+        _HeaderIconButton(
+          icon: Icons.notifications_none_rounded,
+          showBadge: hasNotifications,
+          onPressed: onNotifications,
+        ),
+        _HeaderIconButton(
+          icon: Icons.settings_outlined,
+          onPressed: onProfile,
+        ),
+      ],
+    );
+  }
+}
+
+class _GradientLogoButton extends StatelessWidget {
+  const _GradientLogoButton();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 47,
+      height: 47,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: _TetherPalette.primary.withOpacity(0.30),
+            blurRadius: 20,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          gradient: _TetherPalette.primaryGradient,
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: const Padding(
+          padding: EdgeInsets.all(10),
+          child: CustomPaint(
+            painter: _TetherIconPainter(
+              color: Colors.white,
+              strokeFactor: 0.10,
+              fillOpacity: 0.00,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _HeaderIconButton extends StatelessWidget {
+  final IconData icon;
+  final bool showBadge;
+  final VoidCallback onPressed;
+
+  const _HeaderIconButton({
+    required this.icon,
+    required this.onPressed,
+    this.showBadge = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      children: [
+        IconButton(
+          onPressed: onPressed,
+          splashRadius: 22,
+          icon: Icon(
+            icon,
+            color: _TetherPalette.muted,
+            size: 23,
+          ),
+        ),
+        if (showBadge)
+          Positioned(
+            top: 9,
+            right: 10,
+            child: Container(
+              width: 9,
+              height: 9,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: _TetherPalette.accentGradient,
+                border: Border.all(color: Colors.white, width: 1.5),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class _WelcomeHeroCard extends StatelessWidget {
+  final String greeting;
+  final String displayName;
+  final int unreadCount;
+
+  const _WelcomeHeroCard({
+    required this.greeting,
+    required this.displayName,
+    required this.unreadCount,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      constraints: const BoxConstraints(minHeight: 164),
+      padding: const EdgeInsets.fromLTRB(24, 22, 24, 22),
+      decoration: BoxDecoration(
+        gradient: _TetherPalette.heroGradient,
+        borderRadius: BorderRadius.circular(30),
+        boxShadow: [
+          BoxShadow(
+            color: _TetherPalette.primary.withOpacity(0.28),
+            blurRadius: 32,
+            offset: const Offset(0, 18),
+          ),
+        ],
       ),
       child: Stack(
         children: [
           Positioned(
-            right: 6,
-            top: 4,
+            top: -58,
+            right: -42,
+            child: _HeroOrb(size: 128, opacity: 0.12),
+          ),
+          Positioned(
+            bottom: -55,
+            left: -40,
+            child: _HeroOrb(size: 108, opacity: 0.10),
+          ),
+          Positioned(
+            right: -4,
+            top: -1,
             child: Opacity(
-              opacity: 0.20,
+              opacity: 0.22,
               child: SizedBox(
-                width: 54,
-                height: 54,
+                width: 92,
+                height: 92,
                 child: CustomPaint(
                   painter: const _TetherIconPainter(
-                    color: Color.fromARGB(255, 19, 142, 243),
+                    color: Colors.white,
+                    strokeFactor: 0.045,
+                    fillOpacity: 0.00,
                   ),
                 ),
               ),
             ),
           ),
-          Column(
+          Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                children: [
-                  const Spacer(),
-                  if (unreadCount > 0)
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 5,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.9),
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      child: Text(
-                        '$unreadCount unread',
-                        style: const TextStyle(
-                          color: Color(0xFF475569),
-                          fontSize: 11,
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        greeting,
+                        style: TextStyle(
+                          color: Colors.white.withOpacity(0.82),
+                          fontSize: 15,
                           fontWeight: FontWeight.w700,
                         ),
                       ),
-                    ),
-                ],
+                      const SizedBox(height: 6),
+                      Text(
+                        displayName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 35,
+                          height: 1.03,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: -1.0,
+                        ),
+                      ),
+                      const SizedBox(height: 18),
+                      Text.rich(
+                        TextSpan(
+                          text: unreadCount > 0 ? 'You have ' : '',
+                          children: [
+                            if (unreadCount > 0)
+                              TextSpan(
+                                text: '$unreadCount unread',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w900,
+                                ),
+                              ),
+                            TextSpan(
+                              text: unreadCount > 0
+                                  ? ' messages'
+                                  : 'All caught up!',
+                            ),
+                          ],
+                        ),
+                        style: TextStyle(
+                          color: Colors.white.withOpacity(0.78),
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Text(
-                    'Hello,',
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: Color(0xFF64748B),
-                      fontWeight: FontWeight.w500,
+              if (unreadCount > 0)
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 15,
+                    vertical: 10,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.20),
+                    borderRadius: BorderRadius.circular(22),
+                    border: Border.all(
+                      color: Colors.white.withOpacity(0.18),
                     ),
                   ),
-                  const SizedBox(height: 6),
-                  Text(
-                    displayName,
-                    style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w800,
-                      color: Color(0xFF0F172A),
-                    ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        Icons.auto_awesome_rounded,
+                        color: Colors.white,
+                        size: 17,
+                      ),
+                      const SizedBox(width: 7),
+                      Text(
+                        '$unreadCount',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w900,
+                          fontSize: 15,
+                        ),
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 10),
-                  const Text(
-                    'Stay connected with the people who matter most to you.',
-                    style: TextStyle(
-                      fontSize: 14,
-                      height: 1.35,
-                      color: Color(0xFF475569),
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ],
-              ),
+                ),
             ],
           ),
         ],
@@ -598,46 +869,181 @@ class _WelcomeCard extends StatelessWidget {
   }
 }
 
-class _ActionTile extends StatelessWidget {
-  final String label;
-  final IconData icon;
-  final bool filled;
-  final VoidCallback onTap;
+class _HeroOrb extends StatelessWidget {
+  final double size;
+  final double opacity;
 
-  const _ActionTile({
-    required this.label,
-    required this.icon,
-    required this.onTap,
-    this.filled = false,
+  const _HeroOrb({
+    required this.size,
+    required this.opacity,
   });
 
   @override
   Widget build(BuildContext context) {
-    final background = filled ? const Color(0xFF1274E7) : Colors.white;
-    final foreground = filled ? Colors.white : const Color(0xFF0F172A);
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: Colors.white.withOpacity(opacity),
+      ),
+    );
+  }
+}
 
-    return Material(
-      color: background,
-      borderRadius: BorderRadius.circular(22),
-      elevation: filled ? 2 : 0,
-      shadowColor: Colors.black.withOpacity(0.08),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(22),
-        onTap: onTap,
+class _QuickActionRow extends StatelessWidget {
+  final VoidCallback onCreate;
+  final VoidCallback onJoin;
+  final VoidCallback onLinks;
+
+  const _QuickActionRow({
+    required this.onCreate,
+    required this.onJoin,
+    required this.onLinks,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: _ActionButton(
+            label: 'Create',
+            icon: Icons.add_rounded,
+            gradient: _TetherPalette.primaryGradient,
+            foreground: Colors.white,
+            shadowColor: _TetherPalette.primary,
+            onTap: onCreate,
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: _ActionButton(
+            label: 'Join',
+            icon: Icons.group_add_rounded,
+            gradient: _TetherPalette.accentGradient,
+            foreground: Colors.white,
+            shadowColor: _TetherPalette.accent,
+            onTap: onJoin,
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: _ActionButton(
+            label: 'Links',
+            icon: Icons.link_rounded,
+            foreground: _TetherPalette.text,
+            onTap: onLinks,
+            isPlain: true,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _ActionButton extends StatefulWidget {
+  final String label;
+  final IconData icon;
+  final LinearGradient? gradient;
+  final Color foreground;
+  final Color? shadowColor;
+  final VoidCallback onTap;
+  final bool isPlain;
+
+  const _ActionButton({
+    required this.label,
+    required this.icon,
+    required this.foreground,
+    required this.onTap,
+    this.gradient,
+    this.shadowColor,
+    this.isPlain = false,
+  });
+
+  @override
+  State<_ActionButton> createState() => _ActionButtonState();
+}
+
+class _ActionButtonState extends State<_ActionButton> {
+  bool _pressed = false;
+
+  void _setPressed(bool value) {
+    if (mounted) {
+      setState(() => _pressed = value);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedScale(
+      scale: _pressed ? 0.97 : 1,
+      duration: const Duration(milliseconds: 120),
+      curve: Curves.easeOut,
+      child: GestureDetector(
+        onTapDown: (_) => _setPressed(true),
+        onTapCancel: () => _setPressed(false),
+        onTapUp: (_) => _setPressed(false),
+        onTap: widget.onTap,
         child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
-          alignment: Alignment.center,
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
+          height: 60,
+          decoration: BoxDecoration(
+            color: widget.isPlain ? Colors.white : null,
+            gradient: widget.isPlain ? null : widget.gradient,
+            borderRadius: BorderRadius.circular(20),
+            border: widget.isPlain
+                ? Border.all(color: _TetherPalette.border, width: 1.2)
+                : null,
+            boxShadow: [
+              BoxShadow(
+                color: (widget.shadowColor ?? Colors.black).withOpacity(
+                  widget.isPlain ? 0.08 : 0.24,
+                ),
+                blurRadius: widget.isPlain ? 14 : 22,
+                offset: const Offset(0, 10),
+              ),
+            ],
+          ),
+          child: Stack(
             children: [
-              Icon(icon, size: 22, color: foreground),
-              const SizedBox(height: 8),
-              Text(
-                label,
-                style: TextStyle(
-                  color: foreground,
-                  fontWeight: FontWeight.w700,
-                  fontSize: 15,
+              if (!widget.isPlain)
+                Positioned.fill(
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(20),
+                    child: Align(
+                      alignment: Alignment.topLeft,
+                      child: Container(
+                        width: 70,
+                        height: 70,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: Colors.white.withOpacity(0.12),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              Center(
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      widget.icon,
+                      size: 21,
+                      color: widget.isPlain
+                          ? _TetherPalette.primary
+                          : widget.foreground,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      widget.label,
+                      style: TextStyle(
+                        color: widget.foreground,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],
@@ -648,71 +1054,216 @@ class _ActionTile extends StatelessWidget {
   }
 }
 
-class _MessageCard extends StatelessWidget {
-  final Widget leading;
+class _SectionHeader extends StatelessWidget {
   final String title;
-  final String subtitle;
-  final String timeLabel;
-  final int? badgeCount;
-  final bool subtitleBold;
-  final VoidCallback onTap;
+  final String countLabel;
 
-  const _MessageCard({
-    required this.leading,
+  const _SectionHeader({
     required this.title,
-    required this.subtitle,
-    required this.timeLabel,
-    required this.onTap,
-    this.badgeCount,
-    this.subtitleBold = false,
+    required this.countLabel,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: const Color(0xFFF8FBFF),
-      borderRadius: BorderRadius.circular(22),
-      elevation: 0,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(22),
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.all(14),
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      child: Row(
+        children: [
+          Text(
+            title,
+            style: const TextStyle(
+              color: _TetherPalette.text,
+              fontSize: 17,
+              fontWeight: FontWeight.w900,
+              letterSpacing: -0.1,
+            ),
+          ),
+          const Spacer(),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.82),
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(color: _TetherPalette.border),
+            ),
+            child: Text(
+              countLabel,
+              style: const TextStyle(
+                color: _TetherPalette.muted,
+                fontSize: 12,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ConversationCard extends StatefulWidget {
+  final _InboxItem item;
+
+  const _ConversationCard({
+    required this.item,
+  });
+
+  @override
+  State<_ConversationCard> createState() => _ConversationCardState();
+}
+
+class _ConversationCardState extends State<_ConversationCard> {
+  bool _pressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final item = widget.item;
+    final hasUnread = item.badgeCount != null && item.badgeCount! > 0;
+    final isCircle = item.type == _InboxItemType.circle;
+
+    final accent = isCircle ? _TetherPalette.accent : _TetherPalette.primary;
+
+    return AnimatedScale(
+      scale: _pressed ? 0.985 : 1,
+      duration: const Duration(milliseconds: 110),
+      curve: Curves.easeOut,
+      child: GestureDetector(
+        onTapDown: (_) => setState(() => _pressed = true),
+        onTapCancel: () => setState(() => _pressed = false),
+        onTapUp: (_) => setState(() => _pressed = false),
+        onTap: item.onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 220),
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(22),
-            border: Border.all(color: const Color(0xFFE2E8F0), width: 1),
+            gradient: hasUnread
+                ? LinearGradient(
+                    begin: Alignment.centerLeft,
+                    end: Alignment.centerRight,
+                    colors: [
+                      Colors.white,
+                      Colors.white,
+                      accent.withOpacity(0.055),
+                    ],
+                  )
+                : null,
+            color: hasUnread ? null : Colors.white.withOpacity(0.78),
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(
+              color: hasUnread
+                  ? accent.withOpacity(0.20)
+                  : Colors.white.withOpacity(0.85),
+              width: 1,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: hasUnread
+                    ? accent.withOpacity(0.14)
+                    : Colors.black.withOpacity(0.035),
+                blurRadius: hasUnread ? 24 : 16,
+                offset: const Offset(0, 12),
+              ),
+            ],
           ),
           child: Row(
             children: [
-              leading,
-              const SizedBox(width: 14),
+              Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  item.leading,
+                  if (isCircle)
+                    Positioned(
+                      right: -3,
+                      bottom: -4,
+                      child: Container(
+                        width: 19,
+                        height: 19,
+                        decoration: BoxDecoration(
+                          gradient: _TetherPalette.accentGradient,
+                          shape: BoxShape.circle,
+                          border: Border.all(color: Colors.white, width: 2),
+                          boxShadow: [
+                            BoxShadow(
+                              color: _TetherPalette.accent.withOpacity(0.28),
+                              blurRadius: 8,
+                            ),
+                          ],
+                        ),
+                        child: const Padding(
+                          padding: EdgeInsets.all(3.5),
+                          child: CustomPaint(
+                            painter: _TetherIconPainter(
+                              color: Colors.white,
+                              strokeFactor: 0.12,
+                              fillOpacity: 0,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+              const SizedBox(width: 16),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w800,
-                        color: Color(0xFF0F172A),
-                      ),
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            item.title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: _TetherPalette.text,
+                              fontSize: 16,
+                              fontWeight:
+                                  hasUnread ? FontWeight.w900 : FontWeight.w800,
+                              letterSpacing: -0.2,
+                            ),
+                          ),
+                        ),
+                        if (item.memberCount != null) ...[
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 3,
+                            ),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF4F4FA),
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: Text(
+                              '${item.memberCount} members',
+                              style: const TextStyle(
+                                color: _TetherPalette.muted,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
-                    const SizedBox(height: 4),
+                    const SizedBox(height: 7),
                     Text(
-                      subtitle,
+                      item.isTyping ? 'typing...' : item.subtitle,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
+                        color: item.isTyping
+                            ? _TetherPalette.primary
+                            : item.subtitleBold
+                                ? _TetherPalette.text.withOpacity(0.82)
+                                : _TetherPalette.muted,
                         fontSize: 14.5,
-                        color: subtitleBold
-                            ? const Color(0xFF0F172A)
-                            : const Color(0xFF475569),
-                        fontWeight: subtitleBold
-                            ? FontWeight.w700
-                            : FontWeight.w500,
+                        height: 1.2,
+                        fontStyle:
+                            item.isTyping ? FontStyle.italic : FontStyle.normal,
+                        fontWeight:
+                            item.subtitleBold ? FontWeight.w700 : FontWeight.w600,
                       ),
                     ),
                   ],
@@ -722,35 +1273,57 @@ class _MessageCard extends StatelessWidget {
               Column(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  if (timeLabel.isNotEmpty)
+                  if (item.timeLabel.isNotEmpty)
                     Text(
-                      timeLabel,
-                      style: const TextStyle(
-                        fontSize: 13,
-                        color: Color(0xFF1274E7),
-                        fontWeight: FontWeight.w700,
+                      item.timeLabel,
+                      style: TextStyle(
+                        color: hasUnread ? accent : _TetherPalette.muted,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w900,
                       ),
                     ),
-                  if (badgeCount != null) ...[
-                    if (timeLabel.isNotEmpty) const SizedBox(height: 8),
-                    Container(
-                      width: 26,
-                      height: 26,
-                      decoration: const BoxDecoration(
-                        color: Color(0xFF1274E7),
-                        shape: BoxShape.circle,
-                      ),
-                      alignment: Alignment.center,
-                      child: Text(
-                        '$badgeCount',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w800,
-                          fontSize: 12,
+                  const SizedBox(height: 9),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (hasUnread)
+                        Container(
+                          width: 28,
+                          height: 28,
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            gradient: isCircle
+                                ? _TetherPalette.accentGradient
+                                : _TetherPalette.primaryGradient,
+                            borderRadius: BorderRadius.circular(16),
+                            boxShadow: [
+                              BoxShadow(
+                                color: accent.withOpacity(0.30),
+                                blurRadius: 12,
+                                offset: const Offset(0, 6),
+                              ),
+                            ],
+                          ),
+                          child: Text(
+                            item.badgeCount! > 99
+                                ? '99+'
+                                : '${item.badgeCount}',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
                         ),
+                      const SizedBox(width: 7),
+                      Icon(
+                        Icons.chevron_right_rounded,
+                        color: _TetherPalette.softMuted,
+                        size: 22,
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ],
               ),
             ],
@@ -767,7 +1340,12 @@ class _CircleClusterAvatar extends StatelessWidget {
   const _CircleClusterAvatar({required this.seed});
 
   Color _colorForIndex(int index) {
-    const colors = [Color(0xFF11C5B7), Color(0xFF4F7DF3), Color(0xFF6E63F6)];
+    const colors = [
+      Color(0xFF10BFB7),
+      Color(0xFF4F7DF3),
+      Color(0xFF7467F4),
+      Color(0xFFD66BEE),
+    ];
     return colors[index % colors.length];
   }
 
@@ -781,33 +1359,36 @@ class _CircleClusterAvatar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      width: 56,
-      height: 48,
+      width: 58,
+      height: 52,
       child: Stack(
         clipBehavior: Clip.none,
         children: [
           Positioned(
-            left: 0,
-            top: 3,
+            left: 2,
+            top: 5,
             child: _MiniCircle(
               label: _initialForIndex(0),
               color: _colorForIndex(0),
+              size: 30,
             ),
           ),
           Positioned(
-            left: 18,
+            left: 21,
             top: 0,
             child: _MiniCircle(
               label: _initialForIndex(1),
               color: _colorForIndex(1),
+              size: 31,
             ),
           ),
           Positioned(
-            left: 9,
-            top: 18,
+            left: 12,
+            top: 22,
             child: _MiniCircle(
               label: _initialForIndex(2),
               color: _colorForIndex(2),
+              size: 31,
             ),
           ),
         ],
@@ -819,26 +1400,38 @@ class _CircleClusterAvatar extends StatelessWidget {
 class _MiniCircle extends StatelessWidget {
   final String label;
   final Color color;
+  final double size;
 
-  const _MiniCircle({required this.label, required this.color});
+  const _MiniCircle({
+    required this.label,
+    required this.color,
+    required this.size,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 28,
-      height: 28,
+      width: size,
+      height: size,
+      alignment: Alignment.center,
       decoration: BoxDecoration(
         color: color,
         shape: BoxShape.circle,
-        border: Border.all(color: Colors.white, width: 2),
+        border: Border.all(color: Colors.white, width: 2.4),
+        boxShadow: [
+          BoxShadow(
+            color: color.withOpacity(0.22),
+            blurRadius: 10,
+            offset: const Offset(0, 5),
+          ),
+        ],
       ),
-      alignment: Alignment.center,
       child: Text(
         label,
         style: const TextStyle(
           color: Colors.white,
-          fontWeight: FontWeight.w800,
           fontSize: 11,
+          fontWeight: FontWeight.w900,
         ),
       ),
     );
@@ -849,31 +1442,50 @@ class _MessageEmptyState extends StatelessWidget {
   final String title;
   final String subtitle;
 
-  const _MessageEmptyState({required this.title, required this.subtitle});
+  const _MessageEmptyState({
+    required this.title,
+    required this.subtitle,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 28),
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
       decoration: BoxDecoration(
-        color: const Color(0xFFF8FBFF),
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
+        color: Colors.white.withOpacity(0.78),
+        borderRadius: BorderRadius.circular(28),
+        border: Border.all(color: _TetherPalette.border),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.035),
+            blurRadius: 18,
+            offset: const Offset(0, 10),
+          ),
+        ],
       ),
       child: Column(
         children: [
-          Icon(
-            Icons.chat_bubble_outline_rounded,
-            size: 44,
-            color: Colors.blue.shade300,
+          Container(
+            width: 62,
+            height: 62,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: _TetherPalette.primary.withOpacity(0.08),
+            ),
+            child: const Icon(
+              Icons.chat_bubble_outline_rounded,
+              size: 30,
+              color: _TetherPalette.primary,
+            ),
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 16),
           Text(
             title,
             style: const TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.w800,
-              color: Color(0xFF0F172A),
+              color: _TetherPalette.text,
+              fontSize: 19,
+              fontWeight: FontWeight.w900,
             ),
           ),
           const SizedBox(height: 8),
@@ -881,9 +1493,10 @@ class _MessageEmptyState extends StatelessWidget {
             subtitle,
             textAlign: TextAlign.center,
             style: const TextStyle(
-              color: Color(0xFF64748B),
+              color: _TetherPalette.muted,
               fontSize: 14.5,
               height: 1.35,
+              fontWeight: FontWeight.w600,
             ),
           ),
         ],
@@ -894,30 +1507,38 @@ class _MessageEmptyState extends StatelessWidget {
 
 class _TetherIconPainter extends CustomPainter {
   final Color color;
+  final double strokeFactor;
+  final double fillOpacity;
 
-  const _TetherIconPainter({required this.color});
+  const _TetherIconPainter({
+    required this.color,
+    this.strokeFactor = 0.09,
+    this.fillOpacity = 0.16,
+  });
 
   @override
   void paint(Canvas canvas, Size size) {
-    final paint = Paint()
+    final stroke = Paint()
       ..color = color
       ..style = PaintingStyle.stroke
-      ..strokeWidth = size.width * 0.12
+      ..strokeWidth = size.width * strokeFactor
       ..strokeCap = StrokeCap.round;
 
-    final fillPaint = Paint()
-      ..color = color.withOpacity(0.18)
+    final fill = Paint()
+      ..color = color.withOpacity(fillOpacity)
       ..style = PaintingStyle.fill;
 
-    final center1 = Offset(size.width * 0.35, size.height * 0.4);
-    final center2 = Offset(size.width * 0.65, size.height * 0.6);
-    final radius = size.width * 0.25;
+    final centerY = size.height / 2;
+    final radius = size.width * 0.28;
 
-    canvas.drawLine(center1, center2, paint);
-    canvas.drawCircle(center1, radius, fillPaint);
-    canvas.drawCircle(center1, radius, paint);
-    canvas.drawCircle(center2, radius, fillPaint);
-    canvas.drawCircle(center2, radius, paint);
+    final left = Offset(size.width * 0.38, centerY);
+    final right = Offset(size.width * 0.62, centerY);
+
+    canvas.drawCircle(left, radius, fill);
+    canvas.drawCircle(right, radius, fill);
+
+    canvas.drawCircle(left, radius, stroke);
+    canvas.drawCircle(right, radius, stroke);
   }
 
   @override

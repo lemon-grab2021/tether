@@ -5,12 +5,19 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { AuditLogService } from '../audit-log/audit-log.service';
 import { CreateDirectConversationDto } from './dto/create-direct-message.dto';
-import { SendDirectMessageDto } from './dto/send-direct-messages.dto';
+import { UploadsService } from '../uploads/uploads.service';
+
+type SendDirectMessageInput = {
+  conversationId: number;
+  body?: string;
+  mediaUrl?: string;
+};
 
 @Injectable()
 export class DirectMessagesService {
-  constructor(private prisma: PrismaService, private auditLogService,) { }
+  constructor(private prisma: PrismaService, private auditLogService: AuditLogService, private uploadsService: UploadsService) { }
 
   private readonly userSelect = {
     id: true,
@@ -189,7 +196,7 @@ export class DirectMessagesService {
       throw new BadRequestException('Message must contain text or media');
     }
 
-    return this.prisma.directMessage.update({
+    const updated = await this.prisma.directMessage.update({
       where: { id: messageId },
       data: {
         body: trimmed,
@@ -201,9 +208,25 @@ export class DirectMessagesService {
         },
       },
     });
+
+    await this.auditLogService.log({
+      userId,
+      action: 'MESSAGE_EDITED',
+      entityType: 'DirectMessage',
+      entityId: messageId.toString(),
+      metadata: {
+        conversationId: message.conversationId,
+        before: message.body,
+        after: trimmed,
+      },
+    });
+
+    return updated;
+
+
   }
 
-  async sendMessage(userId: number, dto: SendDirectMessageDto) {
+  async sendMessage(userId: number, dto: SendDirectMessageInput) {
     const { conversationId, body, mediaUrl } = dto;
 
     const allowed = await this.isParticipant(conversationId, userId);
@@ -211,8 +234,21 @@ export class DirectMessagesService {
       throw new ForbiddenException('You are not in this conversation');
     }
 
-    if ((!body || body.trim() === '') && !mediaUrl) {
+    const trimmedBody = body?.trim();
+
+    if ((!trimmedBody || trimmedBody === '') && !mediaUrl) {
       throw new BadRequestException('Message cannot be empty');
+    }
+
+    let verifiedUpload: Awaited<
+      ReturnType<UploadsService['assertUploadIsSafeForUse']>
+    > | null = null;
+
+    if (mediaUrl) {
+      verifiedUpload = await this.uploadsService.assertUploadIsSafeForUse(
+        userId,
+        mediaUrl,
+      );
     }
 
     const result = await this.prisma.$transaction(async (tx) => {
@@ -220,30 +256,35 @@ export class DirectMessagesService {
         data: {
           conversationId,
           senderId: userId,
-          body: body?.trim(),
-          mediaUrl,
+          body: trimmedBody || null,
+          mediaUrl: mediaUrl || null,
         },
         include: {
           sender: { select: this.userSelect },
         },
       });
 
-      await this.auditLogService.log({
-        userId,
-        action: 'MESSAGE_SENT',
-        entityType: 'DirectMessage',
-        entityId: message.id,
-        metadata: {
-          conversationId,
-        },
-      }, tx);
-
-
       await tx.directConversation.update({
-        where: { id: dto.conversationId },
+        where: { id: conversationId },
         data: { lastMessageAt: message.createdAt },
       });
+
       return message;
+    });
+
+    await this.auditLogService.log({
+      userId,
+      action: 'MESSAGE_SENT',
+      entityType: 'DirectMessage',
+      entityId: result.id.toString(),
+      metadata: {
+        conversationId,
+        hasMedia: Boolean(mediaUrl),
+        uploadId: verifiedUpload?.id,
+        objectKey: verifiedUpload?.objectKey,
+        mimeType: verifiedUpload?.mimeType,
+        sizeBytes: verifiedUpload?.sizeBytes,
+      },
     });
 
     return result;
@@ -272,23 +313,25 @@ export class DirectMessagesService {
       throw new ForbiddenException('You can only delete your own messages');
     }
 
-    if (message.deletedAt) {
-      return message;
-    }
-
-    return this.prisma.directMessage.update({
+    const updated = await this.prisma.directMessage.update({
       where: { id: messageId },
       data: {
-        body: null,
-        mediaUrl: null,
         deletedAt: new Date(),
-      },
-      include: {
-        sender: {
-          select: this.userSelect,
-        },
+        body: null,
       },
     });
+
+    await this.auditLogService.log({
+      userId,
+      action: 'MESSAGE_DELETED',
+      entityType: 'DirectMessage',
+      entityId: messageId.toString(),
+      metadata: {
+        conversationId: message.conversationId,
+      },
+    });
+
+    return updated;
   }
 
   async deleteConversationForUser(conversationId: number, userId: number) {
@@ -303,21 +346,40 @@ export class DirectMessagesService {
       throw new NotFoundException('Conversation not found');
     }
 
+    const purgeAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+
+    let updateData: any = {};
+
     if (conversation.userOneId === userId) {
-      return this.prisma.directConversation.update({
-        where: { id: conversationId },
-        data: { userOneDeletedAt: new Date() },
-      });
+      updateData = {
+        userOneDeletedAt: new Date(),
+        userOnePurgedAt: purgeAt,
+      };
+    } else if (conversation.userTwoId === userId) {
+      updateData = {
+        userTwoDeletedAt: new Date(),
+        userTwoPurgedAt: purgeAt,
+      };
+    } else {
+      throw new ForbiddenException('Not part of conversation');
     }
 
-    if (conversation.userTwoId === userId) {
-      return this.prisma.directConversation.update({
-        where: { id: conversationId },
-        data: { userTwoDeletedAt: new Date() },
-      });
-    }
+    const updated = await this.prisma.directConversation.update({
+      where: { id: conversationId },
+      data: updateData,
+    });
 
-    throw new ForbiddenException('Not a participant in this conversation');
+    await this.auditLogService.log({
+      userId,
+      action: 'CONVERSATION_DELETED',
+      entityType: 'DirectConversation',
+      entityId: conversationId.toString(),
+      metadata: {
+        purgeAt,
+      },
+    });
+
+    return updated;
   }
 
   async restoreConversationForUser(conversationId: number, userId: number) {
@@ -332,21 +394,35 @@ export class DirectMessagesService {
       throw new NotFoundException('Conversation not found');
     }
 
+    let updateData: any = {};
+
     if (conversation.userOneId === userId) {
-      return this.prisma.directConversation.update({
-        where: { id: conversationId },
-        data: { userOneDeletedAt: null },
-      });
+      updateData = {
+        userOneDeletedAt: null,
+        userOnePurgedAt: null,
+      };
+    } else if (conversation.userTwoId === userId) {
+      updateData = {
+        userTwoDeletedAt: null,
+        userTwoPurgedAt: null,
+      };
+    } else {
+      throw new ForbiddenException('Not a participant in this conversation');
     }
 
-    if (conversation.userTwoId === userId) {
-      return this.prisma.directConversation.update({
-        where: { id: conversationId },
-        data: { userTwoDeletedAt: null },
-      });
-    }
+    const restored = await this.prisma.directConversation.update({
+      where: { id: conversationId },
+      data: updateData,
+    });
 
-    throw new ForbiddenException('Not a participant in this conversation');
+    await this.auditLogService.log({
+      userId,
+      action: 'CONVERSATION_RESTORED',
+      entityType: 'DirectConversation',
+      entityId: conversationId.toString(),
+    });
+
+    return restored;
   }
 
   async getDeletedConversationsForUser(userId: number) {
@@ -477,9 +553,4 @@ export class DirectMessagesService {
       },
     });
   }
-
-  async log(params, prisma = this.prisma) {
-    return prisma.auditLog.create({ data: params });
-  }
-
 }
