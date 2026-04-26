@@ -365,7 +365,6 @@ class _CircleSheetStyle {
   static const Color background = Color(0xFFFBFCFF);
   static const Color primary = Color(0xFF6F63F6);
   static const Color secondary = Color(0xFFD96BEF);
-  static const Color teal = Color(0xFF11C5B7);
   static const Color ink = Color(0xFF101828);
   static const Color muted = Color(0xFF667085);
 

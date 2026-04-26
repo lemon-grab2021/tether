@@ -136,7 +136,6 @@ class _DeleteSheetStyle {
   static const Color dangerSoft = Color(0xFFFFE4E8);
   static const Color ink = Color(0xFF101828);
   static const Color muted = Color(0xFF667085);
-  static const Color primary = Color(0xFF6F63F6);
   static const Color secondary = Color(0xFFD96BEF);
 
   static const LinearGradient dangerGradient = LinearGradient(
