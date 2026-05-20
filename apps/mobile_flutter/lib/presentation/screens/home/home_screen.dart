@@ -628,11 +628,11 @@ class _HomeHeader extends StatelessWidget {
             ],
           ),
         ),
-        _HeaderIconButton(icon: Icons.search_rounded, onPressed: onSearch),
+        _HeaderIconButton(false, icon: Icons.search_rounded, onPressed: onSearch),
 
         const NotificationBellButton(),
 
-        _HeaderIconButton(icon: Icons.settings_outlined, onPressed: onProfile),
+        _HeaderIconButton(false, icon: Icons.settings_outlined, onPressed: onProfile),
       ],
     );
   }
@@ -681,10 +681,9 @@ class _HeaderIconButton extends StatelessWidget {
   final bool showBadge;
   final VoidCallback onPressed;
 
-  const _HeaderIconButton({
+  const _HeaderIconButton(this.showBadge, {
     required this.icon,
     required this.onPressed,
-    this.showBadge = false,
   });
 
   @override
