@@ -1,4 +1,3 @@
-# tether
 # Tether
 
 **Tether** is a real-time community messaging platform designed for small communities, societies, clubs, and social groups. The application supports both circle-based group conversations and one-to-one direct messaging, with additional focus on privacy, moderation, audit logging, media sharing, and user engagement.
